@@ -8,12 +8,13 @@ import (
 	"syscall"
 
 	"github.com/DavidLee0620/GoIM/chat/foundation/logger"
+	"github.com/DavidLee0620/GoIM/chat/foundation/web"
 )
 
 func main() {
 	var log *logger.Logger
 	traceIDFn := func(ctx context.Context) string {
-		return "" //TODO:需要从上下文中获取Trace IDs
+		return web.GetTraceID(ctx).String() //TODO:需要从上下文中获取Trace IDs
 	}
 	//创建一个新的日志记录器，输出到标准输出，日志级别为Info，模块名为"CAP"，并传入traceID。
 	log = logger.New(os.Stdout, logger.LevelInfo, "CAP", traceIDFn)
