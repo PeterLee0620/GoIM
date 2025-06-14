@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"runtime/debug"
 
-	"github.com/ardanlabs/usdl/app/sdk/errs"
-	"github.com/ardanlabs/usdl/foundation/web"
+	"github.com/DavidLee0620/GoIM/chat/app/sdk/errs"
+	"github.com/DavidLee0620/GoIM/chat/foundation/web"
 )
 
 // Panics recovers from panics and converts the panic to an error so it is

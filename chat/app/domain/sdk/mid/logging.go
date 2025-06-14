@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/ardanlabs/usdl/app/sdk/errs"
-	"github.com/ardanlabs/usdl/foundation/logger"
-	"github.com/ardanlabs/usdl/foundation/web"
+	"github.com/DavidLee0620/GoIM/chat/app/sdk/errs"
+	"github.com/DavidLee0620/GoIM/chat/foundation/logger"
+	"github.com/DavidLee0620/GoIM/chat/foundation/web"
 )
 
 // Logger writes information about the request to the logs.

@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"path"
 
-	"github.com/ardanlabs/usdl/app/sdk/errs"
-	"github.com/ardanlabs/usdl/foundation/logger"
-	"github.com/ardanlabs/usdl/foundation/web"
+	"github.com/DavidLee0620/GoIM/chat/app/sdk/errs"
+	"github.com/DavidLee0620/GoIM/chat/foundation/logger"
+	"github.com/DavidLee0620/GoIM/chat/foundation/web"
 )
 
 // Errors handles errors coming out of the call chain.

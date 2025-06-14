@@ -1,9 +1,7 @@
 // Package mid provides app level middleware support.
 package mid
 
-import (
-	"github.com/ardanlabs/usdl/foundation/web"
-)
+import "github.com/DavidLee0620/GoIM/chat/foundation/web"
 
 // isError tests if the Encoder has an error inside of it.
 func isError(e web.Encoder) error {
