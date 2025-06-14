@@ -6,7 +6,8 @@ SHELL = $(if $(wildcard $(SHELL_PATH)),/bin/ash,/bin/bash)
 # Chat
 chat-run:
 	go run chat/api/services/cap/main.go | go run chat/api/logfmt/main.go
-
+chat-test:
+	curl -i -X GET http://localhost:3000/test
 
 #============================================================================
 # Modules support
