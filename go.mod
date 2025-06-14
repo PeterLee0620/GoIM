@@ -1,5 +1,8 @@
 module github.com/DavidLee0620/GoIM
 
-go 1.24.3
+go 1.23.4
 
-require github.com/google/uuid v1.6.0
+require (
+	github.com/ardanlabs/conf/v3 v3.8.0
+	github.com/google/uuid v1.6.0
+)
