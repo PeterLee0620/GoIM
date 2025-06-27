@@ -92,7 +92,7 @@ func run(ctx context.Context, log *logger.Logger) error {
 	// Start API Service
 
 	log.Info(ctx, "startup", "status", "initializing V1 API support")
-
+	//优雅关闭 ：在这段代码中，它用于优雅地关闭服务器。当程序接收到 SIGINT（通常是用户按下 Ctrl+C 时发送的信号）或 SIGTERM（用于请求程序终止的信号）时，程序会捕获这些信号，并执行关闭服务器的操作，而不是直接强制退出，从而确保资源能够正确释放，正在进行的操作能够妥善处理。
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
 

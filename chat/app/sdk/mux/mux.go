@@ -29,7 +29,7 @@ func WebAPI(cfg Config) http.Handler {
 		mid.Panics(),
 	)
 
-	chatapp.Routes(app)
+	chatapp.Routes(app, cfg.Log)
 
 	return app
 }
