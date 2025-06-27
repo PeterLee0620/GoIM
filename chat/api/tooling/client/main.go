@@ -17,7 +17,8 @@ func main() {
 }
 
 func hack1() error {
-	const url = "http://localhost:3000/connect"
+	//创建websocket连接
+	const url = "ws://localhost:3000/connect"
 	req := make(http.Header)
 	socket, _, err := websocket.DefaultDialer.Dial(url, req)
 	if err != nil {
@@ -25,6 +26,7 @@ func hack1() error {
 	}
 	defer socket.Close()
 	//----------------------------------------------------------------
+	//读取服务端发出的信息，若为Hello则成功
 	_, msg, err := socket.ReadMessage()
 	if err != nil {
 		return fmt.Errorf("read:%w", err)
@@ -33,7 +35,7 @@ func hack1() error {
 		return fmt.Errorf("unexpected msg:%w", err)
 	}
 	//----------------------------------------------------------------
-
+	//创建uuid和name的结构体，序列化后发送
 	user := struct {
 		ID   uuid.UUID
 		Name string
@@ -49,7 +51,7 @@ func hack1() error {
 		return fmt.Errorf("write:%w", err)
 	}
 	//----------------------------------------------------------------
-
+	//读取服务端发送的信息，并且打印应为Hello Lee
 	_, msg, err = socket.ReadMessage()
 	if err != nil {
 		return fmt.Errorf("read:%w", err)
