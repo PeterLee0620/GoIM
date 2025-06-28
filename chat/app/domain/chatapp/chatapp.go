@@ -8,12 +8,11 @@ import (
 	"github.com/DavidLee0620/GoIM/chat/app/sdk/errs"
 	"github.com/DavidLee0620/GoIM/chat/foundation/logger"
 	"github.com/DavidLee0620/GoIM/chat/foundation/web"
-	"github.com/gorilla/websocket"
 )
 
 type app struct {
-	log  *logger.Logger
-	WS   websocket.Upgrader
+	log *logger.Logger
+
 	chat *chat.Chat
 }
 
@@ -26,15 +25,12 @@ func newApp(log *logger.Logger) *app {
 
 func (a *app) connect(ctx context.Context, r *http.Request) web.Encoder {
 	//创建websocket的握手连接
-	c, err := a.WS.Upgrade(web.GetWriter(ctx), r, nil)
-	if err != nil {
-		return errs.Newf(errs.FailedPrecondition, "unable to upgrade to websocket")
-	}
-	defer c.Close()
 
-	if err := a.chat.Handshake(ctx, c); err != nil {
+	usr, err := a.chat.Handshake(ctx, web.GetWriter(ctx), r)
+	if err != nil {
 		return errs.Newf(errs.FailedPrecondition, "handshake failed:%s", err)
 	}
-	a.chat.Listen(ctx, c)
+	defer usr.Conn.Close()
+	a.chat.Listen(ctx, usr)
 	return web.NewNoResponse()
 }

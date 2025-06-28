@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"sync"
 
 	"time"
 
+	"github.com/DavidLee0620/GoIM/chat/app/sdk/errs"
 	"github.com/DavidLee0620/GoIM/chat/foundation/logger"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -18,22 +20,28 @@ var ErrToNotExists = fmt.Errorf("to user dosen't exists")
 
 type Chat struct {
 	log   *logger.Logger
-	users map[uuid.UUID]connection
+	users map[uuid.UUID]User
 	mu    sync.RWMutex
 }
 
 func New(log *logger.Logger) *Chat {
 	c := Chat{
 		log:   log,
-		users: make(map[uuid.UUID]connection),
+		users: make(map[uuid.UUID]User),
 	}
 	c.ping()
 	return &c
 }
-func (c *Chat) Handshake(ctx context.Context, conn *websocket.Conn) error {
+func (c *Chat) Handshake(ctx context.Context, w http.ResponseWriter, r *http.Request) (User, error) {
 	//服务端发送Hello
+	var ws websocket.Upgrader
+	conn, err := ws.Upgrade(w, r, nil)
+	if err != nil {
+		return User{}, errs.Newf(errs.FailedPrecondition, "unable to upgrade to websocket")
+	}
+
 	if err := conn.WriteMessage(websocket.TextMessage, []byte("Hello")); err != nil {
-		return fmt.Errorf("write message error:%w", err)
+		return User{}, fmt.Errorf("write message error:%w", err)
 	}
 	//设置100ms的上下文
 	ctx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
@@ -41,33 +49,36 @@ func (c *Chat) Handshake(ctx context.Context, conn *websocket.Conn) error {
 	//服务端读取客户端信息
 	msg, err := c.readMessage(ctx, conn)
 	if err != nil {
-		return fmt.Errorf("read message error:%w", err)
+		return User{}, fmt.Errorf("read message error:%w", err)
 	}
 	//将接收的信息反序列化到结构体中
-	var usr user
-	if err := json.Unmarshal(msg, &usr); err != nil {
-		return fmt.Errorf("unmarshal message error:%w", err)
+	usr := User{
+		Conn: conn,
 	}
-	if err := c.addUser(usr, conn); err != nil {
+	if err := json.Unmarshal(msg, &usr); err != nil {
+		return User{}, fmt.Errorf("unmarshal message error:%w", err)
+	}
+	if err := c.addUser(ctx, usr); err != nil {
 		defer conn.Close()
 		if err := conn.WriteMessage(websocket.TextMessage, []byte("Already Connected")); err != nil {
-			return fmt.Errorf("write msg:%w", err)
+			return User{}, fmt.Errorf("write msg:%w", err)
 		}
-		return fmt.Errorf("add user:%w", err)
+		return User{}, fmt.Errorf("add user:%w", err)
 	}
 	//发送Welcome Lee到客户端
 	v := fmt.Sprintf("Welcome %s", usr.Name)
 	if err := conn.WriteMessage(websocket.TextMessage, []byte(v)); err != nil {
-		return fmt.Errorf("write message error:%w", err)
+		return User{}, fmt.Errorf("write message error:%w", err)
 	}
 	c.log.Info(ctx, "handshake completed", "usr", usr)
-	return nil
+	return usr, nil
 }
 
-func (c *Chat) Listen(ctx context.Context, conn *websocket.Conn) {
+func (c *Chat) Listen(ctx context.Context, usr User) {
 	for {
-		msg, err := c.readMessage(ctx, conn)
+		msg, err := c.readMessage(ctx, usr.Conn)
 		if err != nil {
+			c.removeUser(ctx, usr.ID)
 			c.log.Info(ctx, "listen-read", "err", err)
 			return
 		}
@@ -77,14 +88,14 @@ func (c *Chat) Listen(ctx context.Context, conn *websocket.Conn) {
 			return
 		}
 
-		if err := c.sendMeessage(inMsg); err != nil {
+		if err := c.sendMeessage(ctx, inMsg); err != nil {
 			c.log.Info(ctx, "listen-send", "err", err)
 		}
 	}
 }
 
 // ===================================================================
-func (c *Chat) sendMeessage(msg inMessage) error {
+func (c *Chat) sendMeessage(ctx context.Context, msg inMessage) error {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	from, exists := c.users[msg.FromID]
@@ -96,49 +107,46 @@ func (c *Chat) sendMeessage(msg inMessage) error {
 		return ErrToNotExists
 	}
 	m := outMessage{
-		From: user{
-			ID:   from.id,
-			Name: from.name,
+		From: User{
+			ID:   from.ID,
+			Name: from.Name,
 		},
-		To: user{
-			ID:   to.id,
-			Name: to.name,
+		To: User{
+			ID:   to.ID,
+			Name: to.Name,
 		},
 		Msg: msg.Msg,
 	}
 
-	if err := to.conn.WriteJSON(m); err != nil {
+	if err := to.Conn.WriteJSON(m); err != nil {
+		c.removeUser(ctx, to.ID)
 		return fmt.Errorf("write message:%w", err)
 	}
 
 	return nil
 }
-func (c *Chat) addUser(usr user, conn *websocket.Conn) error {
+func (c *Chat) addUser(ctx context.Context, usr User) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if _, exists := c.users[usr.ID]; exists {
 		return fmt.Errorf("user exists")
 	}
-	c.log.Info(context.Background(), "remove user", "name", usr.Name, "id", usr.ID)
+	c.log.Info(ctx, "add user", "name", usr.Name, "id", usr.ID)
 
-	c.users[usr.ID] = connection{
-		id:   usr.ID,
-		name: usr.Name,
-		conn: conn,
-	}
+	c.users[usr.ID] = usr
 	return nil
 }
-func (c *Chat) removeUser(userID uuid.UUID) {
+func (c *Chat) removeUser(ctx context.Context, userID uuid.UUID) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	v, exists := c.users[userID]
+	usr, exists := c.users[userID]
 	if !exists {
-		c.log.Info(context.Background(), "remove user", "userID", userID, "doesn't exisrs")
+		c.log.Info(ctx, "remove user", "userID", userID, "doesn't exisrs")
 		return
 	}
-	c.log.Info(context.Background(), "remove user", "name", v.name, "id", v.id)
+	c.log.Info(ctx, "remove user", "name", usr.Name, "id", usr.ID)
 	delete(c.users, userID)
-	v.conn.Close()
+	usr.Conn.Close()
 }
 
 func (c *Chat) readMessage(ctx context.Context, conn *websocket.Conn) ([]byte, error) {
@@ -165,36 +173,37 @@ func (c *Chat) readMessage(ctx context.Context, conn *websocket.Conn) ([]byte, e
 		return nil, ctx.Err()
 	case resp = <-ch:
 		if resp.err != nil {
-			return nil, fmt.Errorf("empty message")
+			return nil, resp.err
 		}
 	}
 	return resp.msg, nil
 }
 
-func (c *Chat) connections() map[uuid.UUID]connection {
+func (c *Chat) connections() map[uuid.UUID]*websocket.Conn {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	m := make(map[uuid.UUID]connection)
-	for k, v := range c.users {
-		m[k] = v
+	m := make(map[uuid.UUID]*websocket.Conn)
+	for id, usr := range c.users {
+		m[id] = usr.Conn
 	}
 	return m
 }
 
 func (c *Chat) ping() {
+
 	ticker := time.NewTicker(10 * time.Second)
 	go func() {
 		for {
+			ctx := context.Background()
 			<-ticker.C
-			c.log.Info(context.Background(), "ping", "status", "started")
-			for k, v := range c.connections() {
-				c.log.Info(context.Background(), "ping", "name", v.name, "id", v.id)
 
-				if err := v.conn.WriteMessage(websocket.PingMessage, []byte("ping")); err != nil {
-					c.removeUser(k)
+			for k, conn := range c.connections() {
+				c.log.Info(ctx, "ping", "status", "send", "id", k)
+				if err := conn.WriteMessage(websocket.PingMessage, []byte("ping")); err != nil {
+					c.removeUser(ctx, k)
 				}
 			}
-			c.log.Info(context.Background(), "ping", "status", "completed")
+
 		}
 	}()
 }
