@@ -47,6 +47,7 @@ func hack1() error {
 	if err != nil {
 		return fmt.Errorf("json marshal:%w", err)
 	}
+
 	if err := socket.WriteMessage(websocket.TextMessage, data); err != nil {
 		return fmt.Errorf("write:%w", err)
 	}

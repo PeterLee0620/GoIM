@@ -31,7 +31,7 @@ func (a *app) connect(ctx context.Context, r *http.Request) web.Encoder {
 		return errs.Newf(errs.FailedPrecondition, "unable to upgrade to websocket")
 	}
 	defer c.Close()
-	usr, err := a.handshake(c)
+	usr, err := a.handshake(ctx, c)
 	if err != nil {
 		return errs.Newf(errs.FailedPrecondition, "unable to handshake:%s", err)
 	}
@@ -39,13 +39,13 @@ func (a *app) connect(ctx context.Context, r *http.Request) web.Encoder {
 	return web.NewNoResponse()
 }
 
-func (a *app) handshake(c *websocket.Conn) (user, error) {
+func (a *app) handshake(ctx context.Context, c *websocket.Conn) (user, error) {
 	//服务端发送Hello
 	if err := c.WriteMessage(websocket.TextMessage, []byte("Hello")); err != nil {
 		return user{}, fmt.Errorf("write message error:%w", err)
 	}
 	//设置100ms的上下文
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
 	defer cancel()
 	//服务端读取客户端信息
 	msg, err := a.readMessage(ctx, c)
