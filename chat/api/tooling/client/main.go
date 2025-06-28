@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -20,10 +22,23 @@ func hack1() error {
 	//创建websocket连接
 	const url = "ws://localhost:3000/connect"
 	req := make(http.Header)
+	users := []uuid.UUID{
+		uuid.MustParse("f3cf4d43-9585-4398-8613-0a5787b1aede"),
+		uuid.MustParse("c60e6de5-3b1d-4500-aba8-ca89903118d0"),
+	}
+	var ID uuid.UUID
+	switch os.Args[1] {
+	case "0":
+		ID = users[0]
+	case "1":
+		ID = users[1]
+	}
+	fmt.Println("ID:", ID)
 	socket, _, err := websocket.DefaultDialer.Dial(url, req)
 	if err != nil {
 		return fmt.Errorf("dial:%w", err)
 	}
+
 	defer socket.Close()
 	//----------------------------------------------------------------
 	//读取服务端发出的信息，若为Hello则成功
@@ -34,13 +49,14 @@ func hack1() error {
 	if string(msg) != "Hello" {
 		return fmt.Errorf("unexpected msg:%w", err)
 	}
+
 	//----------------------------------------------------------------
 	//创建uuid和name的结构体，序列化后发送
 	user := struct {
 		ID   uuid.UUID
 		Name string
 	}{
-		ID:   uuid.New(),
+		ID:   ID,
 		Name: "Lee",
 	}
 	data, err := json.Marshal(&user)
@@ -58,5 +74,75 @@ func hack1() error {
 		return fmt.Errorf("read:%w", err)
 	}
 	fmt.Println(string(msg))
-	return nil
+
+	//----------------------------------------------------------------
+	//监听服务端的消息
+	go func() {
+		for {
+			_, msg, err := socket.ReadMessage()
+			if err != nil {
+				fmt.Printf("read err:%s", err)
+				return
+			}
+			var outMsg outMessage
+			if err := json.Unmarshal(msg, &outMsg); err != nil {
+				fmt.Printf("unmarshal err:%s", err)
+				return
+			}
+
+			fmt.Printf("\n%s\n", outMsg.Msg)
+
+		}
+	}()
+
+	//----------------------------------------------------------------
+	for {
+		fmt.Print("\n\n")
+		fmt.Println("message >")
+		reader := bufio.NewReader(os.Stdin)
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			return fmt.Errorf("error input:%w", err)
+		}
+		var from uuid.UUID
+		var to uuid.UUID
+		switch os.Args[1] {
+		case "0":
+			from = users[0]
+			to = users[1]
+		case "1":
+			from = users[1]
+			to = users[0]
+		}
+		inMsg := inMessage{
+			FromID: from,
+			ToID:   to,
+			Msg:    input,
+		}
+		data2, err := json.Marshal(&inMsg)
+		if err != nil {
+			return fmt.Errorf("json marshal:%w", err)
+		}
+
+		if err := socket.WriteMessage(websocket.TextMessage, data2); err != nil {
+			return fmt.Errorf("write:%w", err)
+		}
+	}
+
+}
+
+type inMessage struct {
+	FromID uuid.UUID `json:"fromID"`
+	ToID   uuid.UUID `json:"toID"`
+	Msg    string    `json:"msg"`
+}
+type outMessage struct {
+	From user   `json:"from"`
+	To   user   `json:"to"`
+	Msg  string `json:"msg"`
+}
+
+type user struct {
+	ID   uuid.UUID `json:"id"`
+	Name string    `json:"name"`
 }

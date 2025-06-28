@@ -31,10 +31,10 @@ func (a *app) connect(ctx context.Context, r *http.Request) web.Encoder {
 		return errs.Newf(errs.FailedPrecondition, "unable to upgrade to websocket")
 	}
 	defer c.Close()
-	usr, err := a.chat.Handshake(ctx, c)
-	if err != nil {
-		return errs.Newf(errs.FailedPrecondition, "unable to handshake:%s", err)
+
+	if err := a.chat.Handshake(ctx, c); err != nil {
+		return errs.Newf(errs.FailedPrecondition, "handshake failed:%s", err)
 	}
-	a.log.Info(ctx, "handshake completed", "usr", usr)
+	a.chat.Listen(ctx, c)
 	return web.NewNoResponse()
 }
