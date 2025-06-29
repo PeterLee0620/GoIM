@@ -1,3 +1,4 @@
+// Package chatapp...
 package chatapp
 
 import (

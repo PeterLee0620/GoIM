@@ -1,3 +1,4 @@
+// Package chat 应用层api
 package chat
 
 import (
@@ -16,8 +17,11 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var ErrFromNotExists = fmt.Errorf("from user dosen't exists")
-var ErrToNotExists = fmt.Errorf("to user dosen't exists")
+// 错误变量
+var (
+	ErrFromNotExists = fmt.Errorf("from user dosen't exists")
+	ErrToNotExists   = fmt.Errorf("to user dosen't exists")
+)
 
 type Chat struct {
 	log   *logger.Logger
@@ -72,7 +76,7 @@ func (c *Chat) Handshake(ctx context.Context, w http.ResponseWriter, r *http.Req
 	if err := conn.WriteMessage(websocket.TextMessage, []byte(v)); err != nil {
 		return User{}, fmt.Errorf("write message error:%w", err)
 	}
-	c.log.Info(ctx, "handshake completed", "usr", usr)
+	c.log.Info(ctx, "chat-handshake", "status", "completed", "usr", usr)
 	return usr, nil
 }
 
@@ -88,12 +92,12 @@ func (c *Chat) Listen(ctx context.Context, usr User) {
 
 		var inMsg inMessage
 		if err := json.Unmarshal(msg, &inMsg); err != nil {
-			c.log.Info(ctx, "listen-unmarshal", "err", err)
+			c.log.Info(ctx, "chat-listen-unmarshal", "err", err)
 			continue
 		}
 
 		if err := c.sendMeessage(inMsg); err != nil {
-			c.log.Info(ctx, "listen-send", "err", err)
+			c.log.Info(ctx, "chat-listen-send", "err", err)
 		}
 	}
 }
@@ -167,7 +171,7 @@ func (c *Chat) addUser(ctx context.Context, usr User) error {
 	if _, exists := c.users[usr.ID]; exists {
 		return fmt.Errorf("user exists")
 	}
-	c.log.Info(ctx, "add user", "name", usr.Name, "id", usr.ID)
+	c.log.Info(ctx, "chat-adduser", "name", usr.Name, "id", usr.ID)
 
 	c.users[usr.ID] = usr
 	return nil
@@ -177,10 +181,10 @@ func (c *Chat) removeUser(ctx context.Context, userID uuid.UUID) {
 	defer c.mu.Unlock()
 	usr, exists := c.users[userID]
 	if !exists {
-		c.log.Info(ctx, "remove user", "userID", userID, "doesn't exisrs")
+		c.log.Info(ctx, "chat-removeuser", "userID", userID, "doesn't exisrs")
 		return
 	}
-	c.log.Info(ctx, "remove user", "name", usr.Name, "id", usr.ID)
+	c.log.Info(ctx, "chat-removeuser", "name", usr.Name, "id", usr.ID)
 	delete(c.users, userID)
 	usr.Conn.Close()
 }
@@ -206,7 +210,7 @@ func (c *Chat) ping() {
 			for k, conn := range c.connections() {
 
 				if err := conn.WriteMessage(websocket.PingMessage, []byte("ping")); err != nil {
-					c.log.Info(ctx, "ping", "status", "failed", "id", k, "err", err)
+					c.log.Info(ctx, "chat-ping", "status", "failed", "id", k, "err", err)
 				}
 			}
 
@@ -217,14 +221,14 @@ func (c *Chat) ping() {
 func (c *Chat) isCriticalError(ctx context.Context, err error) bool {
 	switch err.(type) {
 	case *websocket.CloseError:
-		c.log.Info(ctx, "listen-read", "status", "client disconnected")
+		c.log.Info(ctx, "chat-isCriticalError", "status", "client disconnected")
 		return true
 	default:
 		if errors.Is(err, context.Canceled) {
-			c.log.Info(ctx, "listen-read", "status", "client canceled")
+			c.log.Info(ctx, "chat-isCriticalError", "status", "client canceled")
 			return true
 		}
-		c.log.Info(ctx, "listen-read", "err", err)
+		c.log.Info(ctx, "chat-isCriticalError", "err", err)
 		return false
 	}
 
