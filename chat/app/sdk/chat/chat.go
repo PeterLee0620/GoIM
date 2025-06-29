@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"sync"
@@ -46,15 +47,16 @@ func (c *Chat) Handshake(ctx context.Context, w http.ResponseWriter, r *http.Req
 	//设置100ms的上下文
 	ctx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
 	defer cancel()
+	usr := User{
+		Conn: conn,
+	}
 	//服务端读取客户端信息
-	msg, err := c.readMessage(ctx, conn)
+	msg, err := c.readMessage(ctx, usr)
 	if err != nil {
 		return User{}, fmt.Errorf("read message error:%w", err)
 	}
 	//将接收的信息反序列化到结构体中
-	usr := User{
-		Conn: conn,
-	}
+
 	if err := json.Unmarshal(msg, &usr); err != nil {
 		return User{}, fmt.Errorf("unmarshal message error:%w", err)
 	}
@@ -76,26 +78,61 @@ func (c *Chat) Handshake(ctx context.Context, w http.ResponseWriter, r *http.Req
 
 func (c *Chat) Listen(ctx context.Context, usr User) {
 	for {
-		msg, err := c.readMessage(ctx, usr.Conn)
+		msg, err := c.readMessage(ctx, usr)
 		if err != nil {
-			c.removeUser(ctx, usr.ID)
-			c.log.Info(ctx, "listen-read", "err", err)
-			return
+			if c.isCriticalError(ctx, err) {
+				return
+			}
+			continue
 		}
+
 		var inMsg inMessage
 		if err := json.Unmarshal(msg, &inMsg); err != nil {
 			c.log.Info(ctx, "listen-unmarshal", "err", err)
-			return
+			continue
 		}
 
-		if err := c.sendMeessage(ctx, inMsg); err != nil {
+		if err := c.sendMeessage(inMsg); err != nil {
 			c.log.Info(ctx, "listen-send", "err", err)
 		}
 	}
 }
 
 // ===================================================================
-func (c *Chat) sendMeessage(ctx context.Context, msg inMessage) error {
+
+func (c *Chat) readMessage(ctx context.Context, usr User) ([]byte, error) {
+	type respone struct {
+		msg []byte
+		err error
+	}
+	//通过带有缓冲区的channel防止go程阻塞
+	ch := make(chan respone, 1)
+	go func() {
+		var err error
+		c.log.Info(ctx, "chat-readMessage", "status", "started")
+		defer c.log.Info(ctx, "chat-readMessage", "status", "completed")
+		_, msg, err := usr.Conn.ReadMessage()
+		if err != nil {
+			ch <- respone{nil, err}
+		}
+		ch <- respone{msg, nil}
+	}()
+	var resp respone
+	//要么超时退出，要么100ms内接收到数据退出
+	select {
+	case <-ctx.Done():
+		c.removeUser(ctx, usr.ID)
+		return nil, ctx.Err()
+	case resp = <-ch:
+		if resp.err != nil {
+			c.removeUser(ctx, usr.ID)
+			return nil, resp.err
+		}
+	}
+	return resp.msg, nil
+}
+
+func (c *Chat) sendMeessage(msg inMessage) error {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	from, exists := c.users[msg.FromID]
@@ -119,7 +156,6 @@ func (c *Chat) sendMeessage(ctx context.Context, msg inMessage) error {
 	}
 
 	if err := to.Conn.WriteJSON(m); err != nil {
-		c.removeUser(ctx, to.ID)
 		return fmt.Errorf("write message:%w", err)
 	}
 
@@ -149,36 +185,6 @@ func (c *Chat) removeUser(ctx context.Context, userID uuid.UUID) {
 	usr.Conn.Close()
 }
 
-func (c *Chat) readMessage(ctx context.Context, conn *websocket.Conn) ([]byte, error) {
-	type respone struct {
-		msg []byte
-		err error
-	}
-	//通过带有缓冲区的channel防止go程阻塞
-	ch := make(chan respone, 1)
-	go func() {
-		c.log.Info(ctx, "chat", "status", "starting handshake read")
-		defer c.log.Info(ctx, "chat", "status", "completed handshake read")
-		_, msg, err := conn.ReadMessage()
-		if err != nil {
-			ch <- respone{nil, err}
-		}
-		ch <- respone{msg, nil}
-	}()
-	var resp respone
-	//要么超时退出，要么100ms内接收到数据退出
-	select {
-	case <-ctx.Done():
-		conn.Close()
-		return nil, ctx.Err()
-	case resp = <-ch:
-		if resp.err != nil {
-			return nil, resp.err
-		}
-	}
-	return resp.msg, nil
-}
-
 func (c *Chat) connections() map[uuid.UUID]*websocket.Conn {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -198,12 +204,28 @@ func (c *Chat) ping() {
 			<-ticker.C
 
 			for k, conn := range c.connections() {
-				c.log.Info(ctx, "ping", "status", "send", "id", k)
+
 				if err := conn.WriteMessage(websocket.PingMessage, []byte("ping")); err != nil {
-					c.removeUser(ctx, k)
+					c.log.Info(ctx, "ping", "status", "failed", "id", k, "err", err)
 				}
 			}
 
 		}
 	}()
+}
+
+func (c *Chat) isCriticalError(ctx context.Context, err error) bool {
+	switch err.(type) {
+	case *websocket.CloseError:
+		c.log.Info(ctx, "listen-read", "status", "client disconnected")
+		return true
+	default:
+		if errors.Is(err, context.Canceled) {
+			c.log.Info(ctx, "listen-read", "status", "client canceled")
+			return true
+		}
+		c.log.Info(ctx, "listen-read", "err", err)
+		return false
+	}
+
 }
