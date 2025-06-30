@@ -17,10 +17,10 @@ type app struct {
 	chat *chat.Chat
 }
 
-func newApp(log *logger.Logger) *app {
+func newApp(log *logger.Logger, chat *chat.Chat) *app {
 	return &app{
 		log:  log,
-		chat: chat.New(log),
+		chat: chat,
 	}
 }
 

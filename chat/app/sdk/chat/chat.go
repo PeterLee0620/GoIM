@@ -19,20 +19,26 @@ import (
 
 // 错误变量
 var (
-	ErrFromNotExists = fmt.Errorf("from user dosen't exists")
-	ErrToNotExists   = fmt.Errorf("to user dosen't exists")
+	ErrNotExists = fmt.Errorf("user dosen't exists")
 )
 
 type Chat struct {
-	log   *logger.Logger
-	users map[uuid.UUID]User
-	mu    sync.RWMutex
+	log     *logger.Logger
+	users   Uesrs
+	pongs   map[uuid.UUID]time.Time
+	muPongs sync.RWMutex
+}
+type Uesrs interface {
+	AddUser(ctx context.Context, usr User) error
+	RemoveUser(ctx context.Context, userID uuid.UUID)
+	Connections() map[uuid.UUID]*websocket.Conn
+	Retrieve(ctx context.Context, userID uuid.UUID) (User, error)
 }
 
-func New(log *logger.Logger) *Chat {
+func New(log *logger.Logger, users Uesrs) *Chat {
 	c := Chat{
 		log:   log,
-		users: make(map[uuid.UUID]User),
+		users: users,
 	}
 	c.ping()
 	return &c
@@ -64,7 +70,7 @@ func (c *Chat) Handshake(ctx context.Context, w http.ResponseWriter, r *http.Req
 	if err := json.Unmarshal(msg, &usr); err != nil {
 		return User{}, fmt.Errorf("unmarshal message error:%w", err)
 	}
-	if err := c.addUser(ctx, usr); err != nil {
+	if err := c.users.AddUser(ctx, usr); err != nil {
 		defer conn.Close()
 		if err := conn.WriteMessage(websocket.TextMessage, []byte("Already Connected")); err != nil {
 			return User{}, fmt.Errorf("write msg:%w", err)
@@ -96,7 +102,7 @@ func (c *Chat) Listen(ctx context.Context, usr User) {
 			continue
 		}
 
-		if err := c.sendMeessage(usr, inMsg); err != nil {
+		if err := c.sendMeessage(ctx, usr, inMsg); err != nil {
 			c.log.Info(ctx, "chat-listen-send", "err", err)
 		}
 	}
@@ -123,23 +129,21 @@ func (c *Chat) readMessage(ctx context.Context, usr User) ([]byte, error) {
 	//要么超时退出，要么100ms内接收到数据退出
 	select {
 	case <-ctx.Done():
-		c.removeUser(ctx, usr.ID)
+		c.users.RemoveUser(ctx, usr.ID)
 		return nil, ctx.Err()
 	case resp = <-ch:
 		if resp.err != nil {
-			c.removeUser(ctx, usr.ID)
+			c.users.RemoveUser(ctx, usr.ID)
 			return nil, resp.err
 		}
 	}
 	return resp.msg, nil
 }
 
-func (c *Chat) sendMeessage(usr User, msg inMessage) error {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	to, exists := c.users[msg.ToID]
-	if !exists {
-		return ErrToNotExists
+func (c *Chat) sendMeessage(ctx context.Context, usr User, msg inMessage) error {
+	to, err := c.users.Retrieve(ctx, msg.ToID)
+	if err != nil {
+		return err
 	}
 	m := outMessage{
 		From: User{
@@ -155,39 +159,6 @@ func (c *Chat) sendMeessage(usr User, msg inMessage) error {
 
 	return nil
 }
-func (c *Chat) addUser(ctx context.Context, usr User) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if _, exists := c.users[usr.ID]; exists {
-		return fmt.Errorf("user exists")
-	}
-	c.log.Info(ctx, "chat-adduser", "name", usr.Name, "id", usr.ID)
-
-	c.users[usr.ID] = usr
-	return nil
-}
-func (c *Chat) removeUser(ctx context.Context, userID uuid.UUID) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	usr, exists := c.users[userID]
-	if !exists {
-		c.log.Info(ctx, "chat-removeuser", "userID", userID, "doesn't exisrs")
-		return
-	}
-	c.log.Info(ctx, "chat-removeuser", "name", usr.Name, "id", usr.ID)
-	delete(c.users, userID)
-	usr.Conn.Close()
-}
-
-func (c *Chat) connections() map[uuid.UUID]*websocket.Conn {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	m := make(map[uuid.UUID]*websocket.Conn)
-	for id, usr := range c.users {
-		m[id] = usr.Conn
-	}
-	return m
-}
 
 func (c *Chat) ping() {
 
@@ -197,7 +168,7 @@ func (c *Chat) ping() {
 			ctx := context.Background()
 			<-ticker.C
 
-			for k, conn := range c.connections() {
+			for k, conn := range c.users.Connections() {
 
 				if err := conn.WriteMessage(websocket.PingMessage, []byte("ping")); err != nil {
 					c.log.Info(ctx, "chat-ping", "status", "failed", "id", k, "err", err)
