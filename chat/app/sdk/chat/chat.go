@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"sync"
 
 	"time"
 
@@ -23,15 +22,14 @@ var (
 )
 
 type Chat struct {
-	log     *logger.Logger
-	users   Uesrs
-	pongs   map[uuid.UUID]time.Time
-	muPongs sync.RWMutex
+	log   *logger.Logger
+	users Uesrs
 }
+
 type Uesrs interface {
 	AddUser(ctx context.Context, usr User) error
 	RemoveUser(ctx context.Context, userID uuid.UUID)
-	Connections() map[uuid.UUID]*websocket.Conn
+	Connections() map[uuid.UUID]Connection
 	Retrieve(ctx context.Context, userID uuid.UUID) (User, error)
 }
 
@@ -168,10 +166,13 @@ func (c *Chat) ping() {
 			ctx := context.Background()
 			<-ticker.C
 
-			for k, conn := range c.users.Connections() {
-
-				if err := conn.WriteMessage(websocket.PingMessage, []byte("ping")); err != nil {
-					c.log.Info(ctx, "chat-ping", "status", "failed", "id", k, "err", err)
+			for id, conn := range c.users.Connections() {
+				if !conn.Valid {
+					c.users.RemoveUser(ctx, id)
+					continue
+				}
+				if err := conn.Conn.WriteMessage(websocket.PingMessage, []byte("ping")); err != nil {
+					c.log.Info(ctx, "chat-ping", "status", "failed", "id", id, "err", err)
 				}
 			}
 
