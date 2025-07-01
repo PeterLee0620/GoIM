@@ -23,17 +23,17 @@ var (
 
 type Chat struct {
 	log   *logger.Logger
-	users Uesrs
+	users Users
 }
 
-type Uesrs interface {
+type Users interface {
 	AddUser(ctx context.Context, usr User) error
 	RemoveUser(ctx context.Context, userID uuid.UUID)
-	Connections() map[uuid.UUID]Connection
+	Connections(maxWait time.Duration) map[uuid.UUID]Connection
 	Retrieve(ctx context.Context, userID uuid.UUID) (User, error)
 }
 
-func New(log *logger.Logger, users Uesrs) *Chat {
+func New(log *logger.Logger, users Users) *Chat {
 	c := Chat{
 		log:   log,
 		users: users,
@@ -56,7 +56,8 @@ func (c *Chat) Handshake(ctx context.Context, w http.ResponseWriter, r *http.Req
 	ctx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
 	defer cancel()
 	usr := User{
-		Conn: conn,
+		Conn:     conn,
+		LastPong: time.Now(),
 	}
 	//服务端读取客户端信息
 	msg, err := c.readMessage(ctx, usr)
@@ -159,14 +160,16 @@ func (c *Chat) sendMeessage(ctx context.Context, usr User, msg inMessage) error 
 }
 
 func (c *Chat) ping() {
-
-	ticker := time.NewTicker(10 * time.Second)
+	const maxWait = 10 * time.Second
+	ticker := time.NewTicker(maxWait)
 	go func() {
+		ctx := context.Background()
 		for {
-			ctx := context.Background()
-			<-ticker.C
 
-			for id, conn := range c.users.Connections() {
+			<-ticker.C
+			c.log.Info(ctx, "***ping**", "status", "strated")
+
+			for id, conn := range c.users.Connections(maxWait) {
 				if !conn.Valid {
 					c.users.RemoveUser(ctx, id)
 					continue
@@ -175,8 +178,9 @@ func (c *Chat) ping() {
 					c.log.Info(ctx, "chat-ping", "status", "failed", "id", id, "err", err)
 				}
 			}
-
+			c.log.Info(ctx, "***ping**", "status", "completed")
 		}
+
 	}()
 }
 

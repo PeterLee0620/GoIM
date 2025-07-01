@@ -64,11 +64,11 @@ func (u *Users) RemoveUser(ctx context.Context, userID uuid.UUID) {
 	}
 	u.log.Info(ctx, "chat-removeuser", "name", usr.Name, "id", usr.ID)
 	delete(u.users, userID)
-	usr.Conn.Close()
+
 }
 
-func (u *Users) Connections() map[uuid.UUID]chat.Connection {
-	const maxWait = 5 * time.Second
+func (u *Users) Connections(maxWait time.Duration) map[uuid.UUID]chat.Connection {
+
 	u.muUsers.RLock()
 	defer u.muUsers.RUnlock()
 	m := make(map[uuid.UUID]chat.Connection)
