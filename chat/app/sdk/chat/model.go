@@ -24,6 +24,6 @@ type User struct {
 }
 
 type Connection struct {
-	Conn  *websocket.Conn
-	Valid bool
+	Conn     *websocket.Conn
+	LastPong time.Time
 }

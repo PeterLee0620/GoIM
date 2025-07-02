@@ -2,7 +2,6 @@ package users
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -30,28 +29,27 @@ func (u *Users) AddUser(ctx context.Context, usr chat.User) error {
 	u.muUsers.Lock()
 	defer u.muUsers.Unlock()
 	if _, exists := u.users[usr.ID]; exists {
-		return fmt.Errorf("user exists")
+		return chat.ErrExists
 	}
 	u.log.Info(ctx, "chat-adduser", "name", usr.Name, "id", usr.ID)
 
 	u.users[usr.ID] = usr
 
-	h := func(appData string) error {
-		u.muUsers.Lock()
-		defer func() {
-			u.muUsers.Unlock()
-			u.log.Info(ctx, "pong-handler", "name", usr.Name, "id", usr.ID)
-		}()
-		usr, exists := u.users[usr.ID]
-		if !exists {
-			u.log.Info(ctx, "pong handler", "name", usr.Name, "id", usr.ID, "status", "dose not exists")
-			return nil
-		}
-		usr.LastPong = time.Now()
-		u.users[usr.ID] = usr
-		return nil
+	return nil
+}
+func (u *Users) UpdateLastPong(ctx context.Context, usrID uuid.UUID) error {
+	u.muUsers.Lock()
+	defer u.muUsers.Unlock()
+	usr, exists := u.users[usrID]
+	if !exists {
+		return chat.ErrNotExists
+
 	}
-	usr.Conn.SetPongHandler(h)
+	usr.LastPong = time.Now()
+	u.users[usr.ID] = usr
+
+	u.log.Info(ctx, "chat-updateuser", "name", usr.Name, "id", usr.ID, "lastpong", usr.LastPong)
+
 	return nil
 }
 func (u *Users) RemoveUser(ctx context.Context, userID uuid.UUID) {
@@ -62,26 +60,21 @@ func (u *Users) RemoveUser(ctx context.Context, userID uuid.UUID) {
 		u.log.Info(ctx, "chat-removeuser", "userID", userID, "doesn't exisrs")
 		return
 	}
-	u.log.Info(ctx, "chat-removeuser", "name", usr.Name, "id", usr.ID)
 	delete(u.users, userID)
+	u.log.Info(ctx, "chat-removeuser", "name", usr.Name, "id", usr.ID)
 
 }
 
-func (u *Users) Connections(maxWait time.Duration) map[uuid.UUID]chat.Connection {
+func (u *Users) Connections() map[uuid.UUID]chat.Connection {
 
 	u.muUsers.RLock()
 	defer u.muUsers.RUnlock()
 	m := make(map[uuid.UUID]chat.Connection)
 	for id, usr := range u.users {
-		c := chat.Connection{
-			Conn: usr.Conn,
+		m[id] = chat.Connection{
+			Conn:     usr.Conn,
+			LastPong: usr.LastPong,
 		}
-
-		if time.Since(usr.LastPong) <= maxWait {
-			c.Valid = true
-		}
-
-		m[id] = c
 
 	}
 	return m
