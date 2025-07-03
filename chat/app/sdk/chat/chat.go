@@ -43,7 +43,8 @@ func New(log *logger.Logger, users Users) *Chat {
 		log:   log,
 		users: users,
 	}
-	c.ping()
+	const maxWait = 10 * time.Second
+	c.ping(maxWait)
 	return &c
 }
 func (c *Chat) Handshake(ctx context.Context, w http.ResponseWriter, r *http.Request) (User, error) {
@@ -95,9 +96,9 @@ func (c *Chat) Handshake(ctx context.Context, w http.ResponseWriter, r *http.Req
 	return usr, nil
 }
 
-func (c *Chat) Listen(ctx context.Context, usr User) {
+func (c *Chat) Listen(ctx context.Context, from User) {
 	for {
-		msg, err := c.readMessage(ctx, usr)
+		msg, err := c.readMessage(ctx, from)
 		if err != nil {
 			if c.isCriticalError(ctx, err) {
 				return
@@ -110,14 +111,28 @@ func (c *Chat) Listen(ctx context.Context, usr User) {
 			c.log.Info(ctx, "chat-listen-unmarshal", "err", err)
 			continue
 		}
-		c.log.Info(ctx, "msg recv", "from", usr.ID, "to", inMsg.ToID)
+		c.log.Info(ctx, "msg recv", "from", from.ID, "to", inMsg.ToID)
 
-		if err := c.sendMeessage(ctx, usr, inMsg); err != nil {
+		to, err := c.users.Retrieve(ctx, inMsg.ToID)
+		if err != nil {
+			if errors.Is(err, ErrNotExists) {
+				c.SendToBus(inMsg)
+			}
+			c.log.Info(ctx, "chat-listen-retrieve", "err", err)
+			continue
+		}
+		if err := c.sendMeessage(from, to, inMsg); err != nil {
 			c.log.Info(ctx, "chat-listen-send", "err", err)
 		}
-		c.log.Info(ctx, "msg sent", "from", usr.ID, "to", inMsg.ToID)
+		c.log.Info(ctx, "msg sent", "from", from.ID, "to", inMsg.ToID)
 
 	}
+}
+func (c *Chat) SendToBus(inMsg inMessage) {
+
+}
+func (c *Chat) listenBus(inMsg inMessage) {
+
 }
 
 // ===================================================================
@@ -154,15 +169,12 @@ func (c *Chat) readMessage(ctx context.Context, usr User) ([]byte, error) {
 	return resp.msg, nil
 }
 
-func (c *Chat) sendMeessage(ctx context.Context, usr User, msg inMessage) error {
-	to, err := c.users.Retrieve(ctx, msg.ToID)
-	if err != nil {
-		return err
-	}
+func (c *Chat) sendMeessage(from User, to User, msg inMessage) error {
+
 	m := outMessage{
 		From: User{
-			ID:   usr.ID,
-			Name: usr.Name,
+			ID:   from.ID,
+			Name: from.Name,
 		},
 		Msg: msg.Msg,
 	}
@@ -174,8 +186,8 @@ func (c *Chat) sendMeessage(ctx context.Context, usr User, msg inMessage) error 
 	return nil
 }
 
-func (c *Chat) ping() {
-	const maxWait = 10 * time.Second
+func (c *Chat) ping(maxWait time.Duration) {
+
 	ticker := time.NewTicker(maxWait)
 	go func() {
 
