@@ -4,6 +4,8 @@ SHELL = $(if $(wildcard $(SHELL_PATH)),/bin/ash,/bin/bash)
 
 #============================================================================
 # Chat
+hack:
+	go run chat/api/tooling/hack/main.go
 chat-run:
 	go run chat/api/services/cap/main.go | go run chat/api/tooling/logfmt/main.go
 chat-test:
@@ -12,6 +14,13 @@ chat-hack-0:
 	go run chat/api/tooling/client/main.go 0
 chat-hack-1:
 	go run chat/api/tooling/client/main.go 1
+chat-docker:
+	docker pull nats:2.10
+chat-nats:
+	docker run -p 4222:4222 nats:2.10 -js
+chat-nats-down:
+	docker stop nats:2.10
+	docker rm nats:2.10 -v
 #============================================================================
 # Modules support
 
