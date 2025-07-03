@@ -110,10 +110,13 @@ func (c *Chat) Listen(ctx context.Context, usr User) {
 			c.log.Info(ctx, "chat-listen-unmarshal", "err", err)
 			continue
 		}
+		c.log.Info(ctx, "msg recv", "from", usr.ID, "to", inMsg.ToID)
 
 		if err := c.sendMeessage(ctx, usr, inMsg); err != nil {
 			c.log.Info(ctx, "chat-listen-send", "err", err)
 		}
+		c.log.Info(ctx, "msg sent", "from", usr.ID, "to", inMsg.ToID)
+
 	}
 }
 
