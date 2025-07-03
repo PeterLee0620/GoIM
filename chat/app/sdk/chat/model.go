@@ -19,11 +19,13 @@ type outMessage struct {
 type User struct {
 	ID       uuid.UUID       `json:"id"`
 	Name     string          `json:"name"`
+	LastPing time.Time       `json:"lastping"`
 	LastPong time.Time       `json:"lastpong"`
 	Conn     *websocket.Conn `json:"-"`
 }
 
 type Connection struct {
 	Conn     *websocket.Conn
+	LastPing time.Time
 	LastPong time.Time
 }

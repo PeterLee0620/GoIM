@@ -37,7 +37,7 @@ func (u *Users) AddUser(ctx context.Context, usr chat.User) error {
 
 	return nil
 }
-func (u *Users) UpdateLastPong(ctx context.Context, usrID uuid.UUID) error {
+func (u *Users) UpdateLastPing(ctx context.Context, usrID uuid.UUID) error {
 	u.muUsers.Lock()
 	defer u.muUsers.Unlock()
 	usr, exists := u.users[usrID]
@@ -45,12 +45,23 @@ func (u *Users) UpdateLastPong(ctx context.Context, usrID uuid.UUID) error {
 		return chat.ErrNotExists
 
 	}
+	usr.LastPing = time.Now()
+	u.users[usr.ID] = usr
+
+	return nil
+}
+func (u *Users) UpdateLastPong(ctx context.Context, usrID uuid.UUID) (chat.User, error) {
+	u.muUsers.Lock()
+	defer u.muUsers.Unlock()
+	usr, exists := u.users[usrID]
+	if !exists {
+		return chat.User{}, chat.ErrNotExists
+
+	}
 	usr.LastPong = time.Now()
 	u.users[usr.ID] = usr
 
-	u.log.Info(ctx, "chat-updateuser", "name", usr.Name, "id", usr.ID, "lastpong", usr.LastPong)
-
-	return nil
+	return usr, nil
 }
 func (u *Users) RemoveUser(ctx context.Context, userID uuid.UUID) {
 	u.muUsers.Lock()
@@ -74,6 +85,7 @@ func (u *Users) Connections() map[uuid.UUID]chat.Connection {
 		m[id] = chat.Connection{
 			Conn:     usr.Conn,
 			LastPong: usr.LastPong,
+			LastPing: usr.LastPing,
 		}
 
 	}
