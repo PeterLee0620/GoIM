@@ -11,10 +11,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/DavidLee0620/GoIM/chat/app/sdk/chat"
+	"github.com/DavidLee0620/GoIM/chat/app/sdk/chat/users"
 	"github.com/DavidLee0620/GoIM/chat/app/sdk/mux"
 	"github.com/DavidLee0620/GoIM/chat/foundation/logger"
 	"github.com/DavidLee0620/GoIM/chat/foundation/web"
 	"github.com/ardanlabs/conf/v3"
+	"github.com/nats-io/nats.go"
 )
 
 var build = "develop"
@@ -57,6 +60,10 @@ func run(ctx context.Context, log *logger.Logger) error {
 			ShutdownTimeout time.Duration `conf:"default:20s"`
 			APIHost         string        `conf:"default:0.0.0.0:3000"`
 		}
+		NATS struct {
+			Host    string `conf:"default:demo.nats.io"`
+			Subject string `conf:"default:lee-cap"`
+		}
 	}{
 		Version: conf.Version{
 			Build: build,
@@ -87,7 +94,17 @@ func run(ctx context.Context, log *logger.Logger) error {
 	log.Info(ctx, "startup", "config", out)
 
 	log.BuildInfo(ctx)
-
+	// -------------------------------------------------------------------------
+	// NATS Connection
+	nc, err := nats.Connect(cfg.NATS.Host)
+	if err != nil {
+		return fmt.Errorf("nats create: %w", err)
+	}
+	defer nc.Close()
+	chat, err := chat.New(log, nc, cfg.NATS.Subject, users.New(log))
+	if err != nil {
+		return fmt.Errorf("chat: %w", err)
+	}
 	// -------------------------------------------------------------------------
 	// Start API Service
 
@@ -97,7 +114,8 @@ func run(ctx context.Context, log *logger.Logger) error {
 	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
 
 	cfgMux := mux.Config{
-		Log: log,
+		Log:  log,
+		Chat: chat,
 	}
 
 	webAPI := mux.WebAPI(cfgMux)

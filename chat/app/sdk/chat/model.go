@@ -29,3 +29,9 @@ type Connection struct {
 	LastPing time.Time
 	LastPong time.Time
 }
+type busMessage struct {
+	FromID   uuid.UUID `json:"from"`
+	FromName string    `json:"fromName"`
+	ToID     uuid.UUID `json:"toID"`
+	Msg      string    `json:"msg"`
+}

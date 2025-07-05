@@ -16,6 +16,7 @@ import (
 	"github.com/DavidLee0620/GoIM/chat/foundation/web"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/nats-io/nats.go"
 )
 
 // 错误变量
@@ -25,8 +26,11 @@ var (
 )
 
 type Chat struct {
-	log   *logger.Logger
-	users Users
+	log          *logger.Logger
+	js           nats.JetStreamContext
+	subscription *nats.Subscription
+	subject      string
+	users        Users
 }
 
 type Users interface {
@@ -38,15 +42,41 @@ type Users interface {
 	Retrieve(ctx context.Context, userID uuid.UUID) (User, error)
 }
 
-func New(log *logger.Logger, users Users) *Chat {
-	c := Chat{
-		log:   log,
-		users: users,
+func New(log *logger.Logger, conn *nats.Conn, subject string, users Users) (*Chat, error) {
+
+	js, err := conn.JetStream()
+	if err != nil {
+		return nil, fmt.Errorf("nats create js: %w", err)
 	}
+
+	_, err = js.AddStream(&nats.StreamConfig{
+		Name:     subject,
+		Subjects: []string{subject},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("nats add js: %w", err)
+	}
+
+	sub, err := js.SubscribeSync(subject)
+	if err != nil {
+		return nil, fmt.Errorf("nats SubscribeSync:%w", err)
+	}
+
+	c := Chat{
+		log:          log,
+		users:        users,
+		subject:      subject,
+		subscription: sub,
+		js:           js,
+	}
+	c.listenBus()
+
 	const maxWait = 10 * time.Second
 	c.ping(maxWait)
-	return &c
+
+	return &c, nil
 }
+
 func (c *Chat) Handshake(ctx context.Context, w http.ResponseWriter, r *http.Request) (User, error) {
 	//服务端发送Hello
 	var ws websocket.Upgrader
@@ -76,6 +106,7 @@ func (c *Chat) Handshake(ctx context.Context, w http.ResponseWriter, r *http.Req
 	if err := json.Unmarshal(msg, &usr); err != nil {
 		return User{}, fmt.Errorf("unmarshal message error:%w", err)
 	}
+	//------------------------------------------------------------------------
 	if err := c.users.AddUser(ctx, usr); err != nil {
 		defer conn.Close()
 		if err := conn.WriteMessage(websocket.TextMessage, []byte("Already Connected")); err != nil {
@@ -83,7 +114,9 @@ func (c *Chat) Handshake(ctx context.Context, w http.ResponseWriter, r *http.Req
 		}
 		return User{}, fmt.Errorf("add user:%w", err)
 	}
+
 	usr.Conn.SetPongHandler(c.pong(usr.ID))
+	//------------------------------------------------------------------------
 
 	//发送Welcome Lee到客户端
 	v := fmt.Sprintf("Welcome %s", usr.Name)
@@ -108,35 +141,65 @@ func (c *Chat) Listen(ctx context.Context, from User) {
 
 		var inMsg inMessage
 		if err := json.Unmarshal(msg, &inMsg); err != nil {
-			c.log.Info(ctx, "chat-listen-unmarshal", "err", err)
+			c.log.Info(ctx, "log-listen-unmarshal", "err", err)
 			continue
 		}
-		c.log.Info(ctx, "msg recv", "from", from.ID, "to", inMsg.ToID)
+		c.log.Info(ctx, "LOC:msg recv", "from", from.ID, "to", inMsg.ToID)
 
 		to, err := c.users.Retrieve(ctx, inMsg.ToID)
 		if err != nil {
 			if errors.Is(err, ErrNotExists) {
-				c.SendToBus(inMsg)
+				c.sendMessageBus(from, inMsg)
 			}
-			c.log.Info(ctx, "chat-listen-retrieve", "err", err)
+			c.log.Info(ctx, "log-listen-retrieve", "err", err)
 			continue
 		}
-		if err := c.sendMeessage(from, to, inMsg); err != nil {
-			c.log.Info(ctx, "chat-listen-send", "err", err)
+		if err := c.sendMeessage(from, to, inMsg.Msg); err != nil {
+			c.log.Info(ctx, "log-listen-send", "err", err)
 		}
-		c.log.Info(ctx, "msg sent", "from", from.ID, "to", inMsg.ToID)
+		c.log.Info(ctx, "LOC:msg sent", "from", from.ID, "to", inMsg.ToID)
 
 	}
 }
-func (c *Chat) SendToBus(inMsg inMessage) {
-
-}
-func (c *Chat) listenBus(inMsg inMessage) {
-
-}
 
 // ===================================================================
+func (c *Chat) listenBus() error {
+	ctx := web.SetTraceID(context.Background(), uuid.New())
+	for {
+		msg, err := c.readMessageBus(ctx)
+		if err != nil {
+			if c.isCriticalError(ctx, err) {
+				return err
+			}
+			continue
+		}
 
+		var busMsg busMessage
+		if err := json.Unmarshal(msg.Data, &busMsg); err != nil {
+			c.log.Info(ctx, "bus-listen-unmarshal", "err", err)
+			continue
+		}
+
+		c.log.Info(ctx, "BUS:msg recv", "from", busMsg.FromID, "to", busMsg.ToID)
+
+		to, err := c.users.Retrieve(ctx, busMsg.ToID)
+		if err != nil {
+			if errors.Is(err, ErrNotExists) {
+				c.log.Info(ctx, "bus-listen-Retrieve", "status", "user not found")
+			}
+			continue
+		}
+		from := User{
+			ID:   busMsg.FromID,
+			Name: busMsg.FromName,
+		}
+		if err := c.sendMeessage(from, to, busMsg.Msg); err != nil {
+			c.log.Info(ctx, "bus-listen-send", "err", err)
+		}
+		c.log.Info(ctx, "BUS:msg sent", "from", busMsg.FromID, "to", busMsg.ToID)
+
+	}
+}
 func (c *Chat) readMessage(ctx context.Context, usr User) ([]byte, error) {
 	type respone struct {
 		msg []byte
@@ -168,15 +231,57 @@ func (c *Chat) readMessage(ctx context.Context, usr User) ([]byte, error) {
 	}
 	return resp.msg, nil
 }
+func (c *Chat) readMessageBus(ctx context.Context) (*nats.Msg, error) {
+	type response struct {
+		msg *nats.Msg
+		err error
+	}
+	ch := make(chan response, 1)
 
-func (c *Chat) sendMeessage(from User, to User, msg inMessage) error {
+	go func() {
+		msg, err := c.subscription.NextMsgWithContext(ctx)
+		if err != nil {
+			ch <- response{nil, err}
+		}
+		ch <- response{msg, nil}
+	}()
+	var resp response
+	//要么超时退出，要么100ms内接收到数据退出
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case resp = <-ch:
+		if resp.err != nil {
+			return nil, resp.err
+		}
+	}
+	return resp.msg, nil
+}
+func (c *Chat) sendMessageBus(from User, inMsg inMessage) error {
+	busMsg := busMessage{
+		FromID:   from.ID,
+		FromName: from.Name,
+		ToID:     inMsg.ToID,
+		Msg:      inMsg.Msg,
+	}
+	d, err := json.Marshal(busMsg)
+	if err != nil {
+		return fmt.Errorf("SendToBus- marshal message: %w", err)
+	}
+	_, err = c.js.Publish(c.subject, d)
+	if err != nil {
+		return fmt.Errorf("SendToBus- publish: %w", err)
+	}
+	return nil
+}
+func (c *Chat) sendMeessage(from User, to User, msg string) error {
 
 	m := outMessage{
 		From: User{
 			ID:   from.ID,
 			Name: from.Name,
 		},
-		Msg: msg.Msg,
+		Msg: msg,
 	}
 
 	if err := to.Conn.WriteJSON(m); err != nil {
