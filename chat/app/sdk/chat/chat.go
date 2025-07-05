@@ -163,42 +163,45 @@ func (c *Chat) Listen(ctx context.Context, from User) {
 }
 
 // ===================================================================
-func (c *Chat) listenBus() error {
+func (c *Chat) listenBus() {
 	ctx := web.SetTraceID(context.Background(), uuid.New())
-	for {
-		msg, err := c.readMessageBus(ctx)
-		if err != nil {
-			if c.isCriticalError(ctx, err) {
-				return err
+	go func() {
+		for {
+			msg, err := c.readMessageBus(ctx)
+			if err != nil {
+				if c.isCriticalError(ctx, err) {
+					return
+				}
+				continue
 			}
-			continue
-		}
 
-		var busMsg busMessage
-		if err := json.Unmarshal(msg.Data, &busMsg); err != nil {
-			c.log.Info(ctx, "bus-listen-unmarshal", "err", err)
-			continue
-		}
-
-		c.log.Info(ctx, "BUS:msg recv", "from", busMsg.FromID, "to", busMsg.ToID)
-
-		to, err := c.users.Retrieve(ctx, busMsg.ToID)
-		if err != nil {
-			if errors.Is(err, ErrNotExists) {
-				c.log.Info(ctx, "bus-listen-Retrieve", "status", "user not found")
+			var busMsg busMessage
+			if err := json.Unmarshal(msg.Data, &busMsg); err != nil {
+				c.log.Info(ctx, "bus-listen-unmarshal", "err", err)
+				continue
 			}
-			continue
-		}
-		from := User{
-			ID:   busMsg.FromID,
-			Name: busMsg.FromName,
-		}
-		if err := c.sendMeessage(from, to, busMsg.Msg); err != nil {
-			c.log.Info(ctx, "bus-listen-send", "err", err)
-		}
-		c.log.Info(ctx, "BUS:msg sent", "from", busMsg.FromID, "to", busMsg.ToID)
 
-	}
+			c.log.Info(ctx, "BUS:msg recv", "from", busMsg.FromID, "to", busMsg.ToID)
+
+			to, err := c.users.Retrieve(ctx, busMsg.ToID)
+			if err != nil {
+				if errors.Is(err, ErrNotExists) {
+					c.log.Info(ctx, "bus-listen-Retrieve", "status", "user not found")
+				}
+				continue
+			}
+			from := User{
+				ID:   busMsg.FromID,
+				Name: busMsg.FromName,
+			}
+			if err := c.sendMeessage(from, to, busMsg.Msg); err != nil {
+				c.log.Info(ctx, "bus-listen-send", "err", err)
+			}
+			c.log.Info(ctx, "BUS:msg sent", "from", busMsg.FromID, "to", busMsg.ToID)
+
+		}
+	}()
+
 }
 func (c *Chat) readMessage(ctx context.Context, usr User) ([]byte, error) {
 	type respone struct {
