@@ -185,9 +185,7 @@ func (c *Chat) listenBus() {
 
 			to, err := c.users.Retrieve(ctx, busMsg.ToID)
 			if err != nil {
-				if errors.Is(err, ErrNotExists) {
-					c.log.Info(ctx, "bus-listen-Retrieve", "status", "user not found")
-				}
+				c.log.Info(ctx, "bus-listen-Retrieve", "status", "user not found")
 				continue
 			}
 			from := User{
@@ -257,6 +255,7 @@ func (c *Chat) readMessageBus(ctx context.Context) (*nats.Msg, error) {
 		if resp.err != nil {
 			return nil, resp.err
 		}
+		resp.msg.Ack()
 	}
 	return resp.msg, nil
 }
@@ -354,6 +353,10 @@ func (c *Chat) isCriticalError(ctx context.Context, err error) bool {
 		return false
 	default:
 		if errors.Is(err, context.Canceled) {
+			c.log.Info(ctx, "chat-isCriticalError", "status", "client canceled")
+			return true
+		}
+		if errors.Is(err, nats.ErrConnectionClosed) {
 			c.log.Info(ctx, "chat-isCriticalError", "status", "client canceled")
 			return true
 		}
