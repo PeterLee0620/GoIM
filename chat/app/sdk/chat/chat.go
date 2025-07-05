@@ -56,8 +56,14 @@ func New(log *logger.Logger, conn *nats.Conn, subject string, users Users) (*Cha
 	if err != nil {
 		return nil, fmt.Errorf("nats add js: %w", err)
 	}
-
-	sub, err := js.SubscribeSync(subject)
+	_, err = js.AddConsumer(subject, &nats.ConsumerConfig{
+		Durable:   "durable-consumer",
+		AckPolicy: nats.AckExplicitPolicy,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("nats AddConsumer:%w", err)
+	}
+	sub, err := js.SubscribeSync(subject, nats.DeliverNew())
 	if err != nil {
 		return nil, fmt.Errorf("nats SubscribeSync:%w", err)
 	}
@@ -144,15 +150,22 @@ func (c *Chat) Listen(ctx context.Context, from User) {
 			c.log.Info(ctx, "log-listen-unmarshal", "err", err)
 			continue
 		}
-		c.log.Info(ctx, "LOC:msg recv", "from", from.ID, "to", inMsg.ToID)
+		c.log.Info(ctx, "LOC:msg recv", "from", from.ID, "to", inMsg.ToID, "message", inMsg.Msg)
 
 		to, err := c.users.Retrieve(ctx, inMsg.ToID)
 		if err != nil {
-			if errors.Is(err, ErrNotExists) {
-				c.sendMessageBus(from, inMsg)
+			switch {
+			case errors.Is(err, ErrNotExists):
+				if err := c.sendMessageBus(from, inMsg); err != nil {
+					c.log.Info(ctx, "loc-sendMessageBus", "ERROR", err)
+				}
+				c.log.Info(ctx, "loc-retrieve", "status", "user not found,sending over bus")
+			default:
+				c.log.Info(ctx, "loc-retrieve", "ERROR", err)
+
 			}
-			c.log.Info(ctx, "log-listen-retrieve", "err", err)
 			continue
+
 		}
 		if err := c.sendMeessage(from, to, inMsg.Msg); err != nil {
 			c.log.Info(ctx, "log-listen-send", "err", err)
@@ -181,11 +194,17 @@ func (c *Chat) listenBus() {
 				continue
 			}
 
-			c.log.Info(ctx, "BUS:msg recv", "from", busMsg.FromID, "to", busMsg.ToID)
+			c.log.Info(ctx, "BUS:msg recv", "from", busMsg.FromID, "to", busMsg.ToID, "message", busMsg.Msg)
 
 			to, err := c.users.Retrieve(ctx, busMsg.ToID)
 			if err != nil {
-				c.log.Info(ctx, "bus-listen-Retrieve", "status", "user not found")
+				switch {
+				case errors.Is(err, ErrNotExists):
+					c.log.Info(ctx, "bus-retrieve", "status", "user not found")
+				default:
+					c.log.Info(ctx, "bus-retrieve", "ERROR", err)
+
+				}
 				continue
 			}
 			from := User{
@@ -357,7 +376,7 @@ func (c *Chat) isCriticalError(ctx context.Context, err error) bool {
 			return true
 		}
 		if errors.Is(err, nats.ErrConnectionClosed) {
-			c.log.Info(ctx, "chat-isCriticalError", "status", "client canceled")
+			c.log.Info(ctx, "chat-isCriticalError", "status", "nats connection canceled")
 			return true
 		}
 		c.log.Info(ctx, "chat-isCriticalError", "err", err)
