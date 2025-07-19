@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/signal"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
@@ -17,6 +19,7 @@ import (
 	"github.com/DavidLee0620/GoIM/chat/foundation/logger"
 	"github.com/DavidLee0620/GoIM/chat/foundation/web"
 	"github.com/ardanlabs/conf/v3"
+	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 )
 
@@ -61,8 +64,9 @@ func run(ctx context.Context, log *logger.Logger) error {
 			APIHost         string        `conf:"default:0.0.0.0:3000"`
 		}
 		NATS struct {
-			Host    string `conf:"default:demo.nats.io"`
-			Subject string `conf:"default:lee-cap"`
+			Host       string `conf:"default:demo.nats.io"`
+			Subject    string `conf:"default:lee-cap"`
+			IDFilePath string `conf:"default:chat/zarf"`
 		}
 	}{
 		Version: conf.Version{
@@ -95,17 +99,50 @@ func run(ctx context.Context, log *logger.Logger) error {
 
 	log.BuildInfo(ctx)
 	// -------------------------------------------------------------------------
+	// CapID
+	if !strings.HasSuffix(cfg.NATS.IDFilePath, "/") {
+		cfg.NATS.IDFilePath += "/"
+	}
+	fileName := cfg.NATS.IDFilePath + "cap.id"
+	_, err = os.Stat(fileName)
+	if err != nil {
+
+		os.MkdirAll(cfg.NATS.IDFilePath, os.ModePerm)
+		f, err := os.Create(fileName)
+		if err != nil {
+			return fmt.Errorf("id file Create: %w", err)
+		}
+		if _, err = f.WriteString(uuid.NewString()); err != nil {
+			return fmt.Errorf("id file write: %w", err)
+		}
+		f.Close()
+	}
+	f, err := os.Open(fileName)
+	if err != nil {
+		return fmt.Errorf("id file open: %w", err)
+	}
+	defer f.Close()
+
+	b, err := io.ReadAll(f)
+	if err != nil {
+		return fmt.Errorf("id file read: %w", err)
+	}
+	capID, err := uuid.Parse(string(b))
+	if err != nil {
+		return fmt.Errorf("id file parse: %w", err)
+	}
+	log.Info(ctx, "startup", "status", "getting cap", "capID", capID)
+	// -------------------------------------------------------------------------
 	// NATS Connection
 	nc, err := nats.Connect(cfg.NATS.Host)
 	if err != nil {
 		return fmt.Errorf("nats create: %w", err)
 	}
 	defer nc.Close()
-	chat, err := chat.New(log, nc, cfg.NATS.Subject, users.New(log))
+	chat, err := chat.New(log, nc, cfg.NATS.Subject, users.New(log), capID)
 	if err != nil {
 		return fmt.Errorf("chat: %w", err)
 	}
-	defer chat.Shutdown(context.TODO())
 	// -------------------------------------------------------------------------
 	// Start API Service
 

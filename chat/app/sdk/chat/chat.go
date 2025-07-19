@@ -33,7 +33,7 @@ type Chat struct {
 	subject  string
 	users    Users
 	stream   jetstream.Stream
-	id       string
+	capID    uuid.UUID
 }
 
 type Users interface {
@@ -45,27 +45,27 @@ type Users interface {
 	Retrieve(ctx context.Context, userID uuid.UUID) (User, error)
 }
 
-func New(log *logger.Logger, conn *nats.Conn, subject string, users Users) (*Chat, error) {
-
+func New(log *logger.Logger, conn *nats.Conn, subject string, users Users, capID uuid.UUID) (*Chat, error) {
+	ctx := context.TODO()
 	js, err := jetstream.New(conn)
 	if err != nil {
-		return nil, fmt.Errorf("nats create js: %w", err)
+		return nil, fmt.Errorf("nats new js: %w", err)
 	}
-	ctx := context.Background()
+
 	s1, err := js.CreateStream(ctx, jetstream.StreamConfig{
 		Name:     subject,
 		Subjects: []string{subject},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("nats add js: %w", err)
+		return nil, fmt.Errorf("nats create js: %w", err)
 	}
-	id := uuid.NewString()
 	c1, err := s1.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
-		Durable:   id,
-		AckPolicy: jetstream.AckExplicitPolicy,
+		Durable:       capID.String(),
+		AckPolicy:     jetstream.AckExplicitPolicy,
+		DeliverPolicy: jetstream.DeliverNewPolicy,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("nats AddConsumer:%w", err)
+		return nil, fmt.Errorf("nats create Consumer:%w", err)
 	}
 
 	c := Chat{
@@ -75,7 +75,7 @@ func New(log *logger.Logger, conn *nats.Conn, subject string, users Users) (*Cha
 		consumer: c1,
 		js:       js,
 		stream:   s1,
-		id:       id,
+		capID:    capID,
 	}
 	c.listenBus()
 
@@ -84,9 +84,7 @@ func New(log *logger.Logger, conn *nats.Conn, subject string, users Users) (*Cha
 
 	return &c, nil
 }
-func (c *Chat) Shutdown(ctx context.Context) error {
-	return c.stream.DeleteConsumer(ctx, c.id)
-}
+
 func (c *Chat) Handshake(ctx context.Context, w http.ResponseWriter, r *http.Request) (User, error) {
 	//服务端发送Hello
 	var ws websocket.Upgrader
@@ -197,7 +195,9 @@ func (c *Chat) listenBus() {
 				c.log.Info(ctx, "bus-listen-unmarshal", "err", err)
 				continue
 			}
-
+			if busMsg.CapID == c.capID {
+				continue
+			}
 			c.log.Info(ctx, "BUS:msg recv", "from", busMsg.FromID, "to", busMsg.ToID, "message", busMsg.Msg)
 
 			to, err := c.users.Retrieve(ctx, busMsg.ToID)
@@ -288,6 +288,7 @@ func (c *Chat) sendMessageBus(ctx context.Context, from User, inMsg inMessage) e
 		FromName: from.Name,
 		ToID:     inMsg.ToID,
 		Msg:      inMsg.Msg,
+		CapID:    c.capID,
 	}
 	d, err := json.Marshal(busMsg)
 	if err != nil {
@@ -384,10 +385,7 @@ func (c *Chat) isCriticalError(ctx context.Context, err error) bool {
 			c.log.Info(ctx, "chat-isCriticalError", "status", "nats connection canceled")
 			return true
 		}
-		if errors.Is(err, jetstream.ErrConsumerDeleted) {
-			c.log.Info(ctx, "chat-isCriticalError", "status", "nats consumer deleted")
-			return true
-		}
+
 		c.log.Info(ctx, "chat-isCriticalError", "err", err)
 		return false
 	}
