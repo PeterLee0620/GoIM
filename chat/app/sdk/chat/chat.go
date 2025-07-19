@@ -263,11 +263,23 @@ func (c *Chat) readMessageBus(ctx context.Context) (jetstream.Msg, error) {
 	ch := make(chan response, 1)
 
 	go func() {
-		msg, err := c.consumer.Next()
-		if err != nil {
-			ch <- response{nil, err}
+		for {
+			msg, err := c.consumer.Next(jetstream.FetchMaxWait(time.Second * 5))
+			if err != nil {
+				if errors.Is(err, nats.ErrTimeout) {
+					continue
+				}
+				ch <- response{nil, err}
+				break
+			}
+			if ctx.Err() != nil {
+				ch <- response{nil, ctx.Err()}
+				break
+			}
+			ch <- response{msg, nil}
+			break
 		}
-		ch <- response{msg, nil}
+
 	}()
 	var resp response
 	//要么超时退出，要么100ms内接收到数据退出
@@ -278,7 +290,10 @@ func (c *Chat) readMessageBus(ctx context.Context) (jetstream.Msg, error) {
 		if resp.err != nil {
 			return nil, resp.err
 		}
-		resp.msg.Ack()
+
+	}
+	if err := resp.msg.Ack(); err != nil {
+		return nil, fmt.Errorf("ack message:%w", err)
 	}
 	return resp.msg, nil
 }
