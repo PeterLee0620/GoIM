@@ -77,8 +77,8 @@ func New(log *logger.Logger, conn *nats.Conn, subject string, users Users, capID
 		stream:   s1,
 		capID:    capID,
 	}
-	c.listenBus()
-
+	//c.listenBus()
+	c1.Consume(c.listenBus2(), jetstream.PullMaxMessages(1))
 	const maxWait = 10 * time.Second
 	c.ping(maxWait)
 
@@ -178,51 +178,43 @@ func (c *Chat) Listen(ctx context.Context, from User) {
 }
 
 // ===================================================================
-func (c *Chat) listenBus() {
+
+func (c *Chat) listenBus2() func(msg jetstream.Msg) {
 	ctx := web.SetTraceID(context.Background(), uuid.New())
-	go func() {
-		for {
-			msg, err := c.readMessageBus(ctx)
-			if err != nil {
-				if c.isCriticalError(ctx, err) {
-					return
-				}
-				continue
-			}
 
-			var busMsg busMessage
-			if err := json.Unmarshal(msg.Data(), &busMsg); err != nil {
-				c.log.Info(ctx, "bus-listen-unmarshal", "err", err)
-				continue
-			}
-			if busMsg.CapID == c.capID {
-				continue
-			}
-			c.log.Info(ctx, "BUS:msg recv", "from", busMsg.FromID, "to", busMsg.ToID, "message", busMsg.Msg)
-
-			to, err := c.users.Retrieve(ctx, busMsg.ToID)
-			if err != nil {
-				switch {
-				case errors.Is(err, ErrNotExists):
-					c.log.Info(ctx, "bus-retrieve", "status", "user not found")
-				default:
-					c.log.Info(ctx, "bus-retrieve", "ERROR", err)
-
-				}
-				continue
-			}
-			from := User{
-				ID:   busMsg.FromID,
-				Name: busMsg.FromName,
-			}
-			if err := c.sendMeessage(from, to, busMsg.Msg); err != nil {
-				c.log.Info(ctx, "bus-listen-send", "err", err)
-			}
-			c.log.Info(ctx, "BUS:msg sent", "from", busMsg.FromID, "to", busMsg.ToID)
-
+	f := func(msg jetstream.Msg) {
+		var busMsg busMessage
+		if err := json.Unmarshal(msg.Data(), &busMsg); err != nil {
+			c.log.Info(ctx, "bus-listen-unmarshal", "err", err)
+			return
 		}
-	}()
+		if busMsg.CapID == c.capID {
+			return
+		}
+		c.log.Info(ctx, "BUS:msg recv", "from", busMsg.FromID, "to", busMsg.ToID, "message", busMsg.Msg)
 
+		to, err := c.users.Retrieve(ctx, busMsg.ToID)
+		if err != nil {
+			switch {
+			case errors.Is(err, ErrNotExists):
+				c.log.Info(ctx, "bus-retrieve", "status", "user not found")
+			default:
+				c.log.Info(ctx, "bus-retrieve", "ERROR", err)
+
+			}
+			return
+		}
+		from := User{
+			ID:   busMsg.FromID,
+			Name: busMsg.FromName,
+		}
+		if err := c.sendMeessage(from, to, busMsg.Msg); err != nil {
+			c.log.Info(ctx, "bus-listen-send", "err", err)
+		}
+		c.log.Info(ctx, "BUS:msg sent", "from", busMsg.FromID, "to", busMsg.ToID)
+
+	}
+	return f
 }
 func (c *Chat) readMessage(ctx context.Context, usr User) ([]byte, error) {
 	type respone struct {
@@ -255,48 +247,7 @@ func (c *Chat) readMessage(ctx context.Context, usr User) ([]byte, error) {
 	}
 	return resp.msg, nil
 }
-func (c *Chat) readMessageBus(ctx context.Context) (jetstream.Msg, error) {
-	type response struct {
-		msg jetstream.Msg
-		err error
-	}
-	ch := make(chan response, 1)
 
-	go func() {
-		for {
-			msg, err := c.consumer.Next(jetstream.FetchMaxWait(time.Second * 5))
-			if err != nil {
-				if errors.Is(err, nats.ErrTimeout) {
-					continue
-				}
-				ch <- response{nil, err}
-				break
-			}
-			if ctx.Err() != nil {
-				ch <- response{nil, ctx.Err()}
-				break
-			}
-			ch <- response{msg, nil}
-			break
-		}
-
-	}()
-	var resp response
-	//要么超时退出，要么100ms内接收到数据退出
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case resp = <-ch:
-		if resp.err != nil {
-			return nil, resp.err
-		}
-
-	}
-	if err := resp.msg.Ack(); err != nil {
-		return nil, fmt.Errorf("ack message:%w", err)
-	}
-	return resp.msg, nil
-}
 func (c *Chat) sendMessageBus(ctx context.Context, from User, inMsg inMessage) error {
 	busMsg := busMessage{
 		FromID:   from.ID,
