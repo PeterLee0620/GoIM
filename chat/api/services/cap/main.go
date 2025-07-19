@@ -105,6 +105,7 @@ func run(ctx context.Context, log *logger.Logger) error {
 	if err != nil {
 		return fmt.Errorf("chat: %w", err)
 	}
+	defer chat.Shutdown(context.TODO())
 	// -------------------------------------------------------------------------
 	// Start API Service
 
