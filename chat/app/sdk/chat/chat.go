@@ -374,6 +374,7 @@ func (c *Chat) isCriticalError(ctx context.Context, err error) bool {
 			return true
 		}
 		return false
+
 	default:
 		if errors.Is(err, context.Canceled) {
 			c.log.Info(ctx, "chat-isCriticalError", "status", "client canceled")
@@ -381,6 +382,10 @@ func (c *Chat) isCriticalError(ctx context.Context, err error) bool {
 		}
 		if errors.Is(err, nats.ErrConnectionClosed) {
 			c.log.Info(ctx, "chat-isCriticalError", "status", "nats connection canceled")
+			return true
+		}
+		if errors.Is(err, jetstream.ErrConsumerDeleted) {
+			c.log.Info(ctx, "chat-isCriticalError", "status", "nats consumer deleted")
 			return true
 		}
 		c.log.Info(ctx, "chat-isCriticalError", "err", err)
