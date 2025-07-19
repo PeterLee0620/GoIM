@@ -4,17 +4,23 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 
+	"github.com/DavidLee0620/GoIM/chat/api/tooling/client/chat"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
 func main() {
-	if err := hack1(); err != nil {
-		log.Fatal(err)
+	app := chat.NewApp()
+	const url = "ws://localhost:3000/connect"
+	chat.NewClient(app, ID, url)
+	app.SetButtonHandler()
+	app.WriteText("This is a test func")
+	if err := app.Run(); err != nil {
+		fmt.Printf("Error running app:%s", err)
+		os.Exit(1)
 	}
 }
 

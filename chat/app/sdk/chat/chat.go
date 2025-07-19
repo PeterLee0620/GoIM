@@ -77,8 +77,8 @@ func New(log *logger.Logger, conn *nats.Conn, subject string, users Users, capID
 		stream:   s1,
 		capID:    capID,
 	}
-	//c.listenBus()
-	c1.Consume(c.listenBus2(), jetstream.PullMaxMessages(1))
+
+	c1.Consume(c.listenBus(), jetstream.PullMaxMessages(1))
 	const maxWait = 10 * time.Second
 	c.ping(maxWait)
 
@@ -179,7 +179,7 @@ func (c *Chat) Listen(ctx context.Context, from User) {
 
 // ===================================================================
 
-func (c *Chat) listenBus2() func(msg jetstream.Msg) {
+func (c *Chat) listenBus() func(msg jetstream.Msg) {
 	ctx := web.SetTraceID(context.Background(), uuid.New())
 
 	f := func(msg jetstream.Msg) {
