@@ -29,10 +29,11 @@ func main() {
 	client := chat.NewClient(ID, url)
 	defer client.Close()
 	app := chat.NewApp(client)
+	name := app.FindName(ID.String())
 	writeText := func(name string, msg string) {
 		app.WriteText(name, msg)
 	}
-	if err := client.HandShake(writeText); err != nil {
+	if err := client.HandShake(name, writeText); err != nil {
 		fmt.Printf("Error HandShake:%s", err)
 		os.Exit(1)
 	}

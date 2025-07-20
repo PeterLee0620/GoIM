@@ -137,7 +137,7 @@ func (c *Chat) Handshake(ctx context.Context, w http.ResponseWriter, r *http.Req
 	return usr, nil
 }
 
-func (c *Chat) Listen(ctx context.Context, from User) {
+func (c *Chat) ListenSocket(ctx context.Context, from User) {
 	for {
 		msg, err := c.readMessage(ctx, from)
 		if err != nil {
