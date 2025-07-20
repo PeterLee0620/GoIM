@@ -12,11 +12,30 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+const url = "ws://localhost:3000/connect"
+
 func main() {
-	app := chat.NewApp()
-	const url = "ws://localhost:3000/connect"
-	chat.NewClient(app, ID, url)
-	app.SetButtonHandler()
+	users := []uuid.UUID{
+		uuid.MustParse("f3cf4d43-9585-4398-8613-0a5787b1aede"),
+		uuid.MustParse("c60e6de5-3b1d-4500-aba8-ca89903118d0"),
+	}
+	var ID uuid.UUID
+	switch os.Args[1] {
+	case "0":
+		ID = users[0]
+	case "1":
+		ID = users[1]
+	}
+	client := chat.NewClient(ID, url)
+	defer client.Close()
+	app := chat.NewApp(client)
+	writeText := func(msg string) {
+		app.WriteText(msg)
+	}
+	if err := client.HandShake(writeText); err != nil {
+		fmt.Printf("Error HandShake:%s", err)
+		os.Exit(1)
+	}
 	app.WriteText("This is a test func")
 	if err := app.Run(); err != nil {
 		fmt.Printf("Error running app:%s", err)
