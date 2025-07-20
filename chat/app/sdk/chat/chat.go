@@ -211,6 +211,7 @@ func (c *Chat) listenBus() func(msg jetstream.Msg) {
 		if err := c.sendMeessage(from, to, busMsg.Msg); err != nil {
 			c.log.Info(ctx, "bus-listen-send", "err", err)
 		}
+		msg.Ack()
 		c.log.Info(ctx, "BUS:msg sent", "from", busMsg.FromID, "to", busMsg.ToID)
 
 	}

@@ -29,14 +29,14 @@ func main() {
 	client := chat.NewClient(ID, url)
 	defer client.Close()
 	app := chat.NewApp(client)
-	writeText := func(msg string) {
-		app.WriteText(msg)
+	writeText := func(name string, msg string) {
+		app.WriteText(name, msg)
 	}
 	if err := client.HandShake(writeText); err != nil {
 		fmt.Printf("Error HandShake:%s", err)
 		os.Exit(1)
 	}
-	app.WriteText("This is a test func")
+	app.WriteText("system", "This is a test func")
 	if err := app.Run(); err != nil {
 		fmt.Printf("Error running app:%s", err)
 		os.Exit(1)
