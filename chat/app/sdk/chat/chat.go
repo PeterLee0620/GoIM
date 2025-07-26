@@ -38,11 +38,11 @@ type Chat struct {
 
 type Users interface {
 	AddUser(ctx context.Context, usr User) error
-	UpdateLastPing(ctx context.Context, usrID uuid.UUID) error
-	UpdateLastPong(ctx context.Context, usrID uuid.UUID) (User, error)
-	RemoveUser(ctx context.Context, userID uuid.UUID)
-	Connections() map[uuid.UUID]Connection
-	Retrieve(ctx context.Context, userID uuid.UUID) (User, error)
+	UpdateLastPing(ctx context.Context, usrID string) error
+	UpdateLastPong(ctx context.Context, usrID string) (User, error)
+	RemoveUser(ctx context.Context, userID string)
+	Connections() map[string]Connection
+	Retrieve(ctx context.Context, userID string) (User, error)
 }
 
 func New(log *logger.Logger, conn *nats.Conn, subject string, users Users, capID uuid.UUID) (*Chat, error) {
@@ -315,7 +315,7 @@ func (c *Chat) ping(maxWait time.Duration) {
 
 	}()
 }
-func (c *Chat) pong(id uuid.UUID) func(appData string) error {
+func (c *Chat) pong(id string) func(appData string) error {
 	f := func(appData string) error {
 		ctx := web.SetTraceID(context.Background(), uuid.New())
 		usr, err := c.users.UpdateLastPong(ctx, id)

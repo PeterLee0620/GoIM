@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
-	"strings"
 	"syscall"
 	"time"
 
@@ -100,12 +100,9 @@ func run(ctx context.Context, log *logger.Logger) error {
 	log.BuildInfo(ctx)
 	// -------------------------------------------------------------------------
 	// CapID
-	if !strings.HasSuffix(cfg.NATS.IDFilePath, "/") {
-		cfg.NATS.IDFilePath += "/"
-	}
-	fileName := cfg.NATS.IDFilePath + "cap.id"
-	_, err = os.Stat(fileName)
-	if err != nil {
+
+	fileName := filepath.Join(cfg.NATS.IDFilePath, "cap.id")
+	if _, err := os.Stat(fileName); err != nil {
 
 		os.MkdirAll(cfg.NATS.IDFilePath, os.ModePerm)
 		f, err := os.Create(fileName)
