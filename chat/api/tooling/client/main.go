@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"github.com/DavidLee0620/GoIM/chat/api/tooling/client/app"
-	"github.com/google/uuid"
 )
 
 const (
@@ -27,32 +26,21 @@ func run() error {
 	}
 	id := cfg.User().ID
 	name := cfg.User().Name
-	client := app.New(id, url)
+	client := app.New(id, url, cfg)
 	defer client.Close()
-	app := app.NewApp(client, cfg)
-	log := func(name string, msg string) {
-		app.WriteText(name, msg)
+	a := app.NewApp(client, cfg)
+	uiWrite := func(name string, msg string) {
+		a.WriteText(name, msg)
 	}
-	if err := client.HandShake(name, log); err != nil {
+	uiUpdateContact := func(id string, name string) {
+		a.UpdateContact(id, name)
+	}
+	if err := client.HandShake(name, uiWrite, uiUpdateContact); err != nil {
 		return fmt.Errorf("error HandShake:%w", err)
 	}
-	app.WriteText("system", "CONNECTED")
-	if err := app.Run(); err != nil {
+	a.WriteText("system", "CONNECTED")
+	if err := a.Run(); err != nil {
 		return fmt.Errorf("error running app:%w", err)
 	}
 	return nil
-}
-
-type inMessage struct {
-	ToID uuid.UUID `json:"toID"`
-	Msg  string    `json:"msg"`
-}
-type outMessage struct {
-	From user   `json:"from"`
-	Msg  string `json:"msg"`
-}
-
-type user struct {
-	ID   uuid.UUID `json:"id"`
-	Name string    `json:"name"`
 }
