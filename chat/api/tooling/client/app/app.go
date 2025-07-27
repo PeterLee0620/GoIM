@@ -15,22 +15,11 @@ type App struct {
 	client   *Client
 	list     *tview.List
 	textArea *tview.TextArea
-	cfg      *Config
+	contacts *Contacts
 }
 
-func NewApp(client *Client, cfg *Config) *App {
+func NewApp(client *Client, contacts *Contacts) *App {
 	app := tview.NewApplication()
-
-	// -------------------------------------------------------------------------
-
-	list := tview.NewList()
-	list.SetBorder(true)
-	list.SetTitle("Users")
-	users := cfg.Contacts()
-	for i, user := range users {
-		shortcut := rune(i + 49)
-		list.AddItem(user.Name, user.ID, shortcut, nil)
-	}
 
 	// -------------------------------------------------------------------------
 
@@ -42,8 +31,34 @@ func NewApp(client *Client, cfg *Config) *App {
 		})
 
 	textview.SetBorder(true)
-	textview.SetTitle(fmt.Sprintf("*** %s ***", cfg.User().ID))
+	textview.SetTitle(fmt.Sprintf("*** %s ***", contacts.My().ID))
+	// -------------------------------------------------------------------------
 
+	list := tview.NewList()
+	list.SetBorder(true)
+	list.SetTitle("Users")
+	//清除文本 切换聊天界面
+	list.SetChangedFunc(func(index int, name string, id string, shortcut rune) {
+		textview.Clear()
+		user, err := contacts.LookupContact(id)
+		if err != nil {
+			textview.ScrollToEnd()
+			fmt.Fprintln(textview, "-----")
+			fmt.Fprintln(textview, name+":"+err.Error())
+			return
+		}
+		for i, msg := range user.Messages {
+			fmt.Fprintln(textview, msg)
+			if i < len(user.Messages)-1 {
+				fmt.Fprintln(textview, "-----")
+			}
+		}
+	})
+	users := contacts.Contacts()
+	for i, user := range users {
+		shortcut := rune(i + 49)
+		list.AddItem(user.Name, user.ID, shortcut, nil)
+	}
 	// -------------------------------------------------------------------------
 
 	button := tview.NewButton("SUBMIT")
@@ -93,7 +108,7 @@ func NewApp(client *Client, cfg *Config) *App {
 		client:   client,
 		list:     list,
 		textArea: textArea,
-		cfg:      cfg,
+		contacts: contacts,
 	}
 	button.SetSelectedFunc(a.ButtonHandler)
 	textArea.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
@@ -112,10 +127,21 @@ func (a *App) Run() error {
 	return a.app.SetRoot(a.flex, true).EnableMouse(true).Run()
 }
 
-func (a *App) WriteText(name string, msg string) {
+func (a *App) WriteText(id string, msg string) {
 	a.textview.ScrollToEnd()
-	fmt.Fprintln(a.textview, "-----")
-	fmt.Fprintln(a.textview, name+":"+msg)
+
+	name, foundID := a.list.GetItemText(a.list.GetCurrentItem())
+	if foundID == "" {
+		fmt.Fprintln(a.textview, "-----")
+		fmt.Fprintln(a.textview, "id not found"+":"+id)
+		return
+	}
+	if foundID == id {
+		fmt.Fprintln(a.textview, "-----")
+		fmt.Fprintln(a.textview, name+":"+msg)
+		return
+	}
+
 }
 
 func (a *App) ButtonHandler() {

@@ -39,22 +39,17 @@ func main() {
 }
 
 func run() error {
-	cfg, err := app.NewConfig(configFilePath)
+	cfg, err := app.NewContacts(configFilePath)
 	if err != nil {
 		return fmt.Errorf("error config:%w", err)
 	}
-	id := cfg.User().ID
-	name := cfg.User().Name
+	id := cfg.My().ID
+	name := cfg.My().Name
 	client := app.New(id, url, cfg)
 	defer client.Close()
 	a := app.NewApp(client, cfg)
-	uiWrite := func(name string, msg string) {
-		a.WriteText(name, msg)
-	}
-	uiUpdateContact := func(id string, name string) {
-		a.UpdateContact(id, name)
-	}
-	if err := client.HandShake(name, uiWrite, uiUpdateContact); err != nil {
+
+	if err := client.HandShake(name, a.WriteText, a.UpdateContact); err != nil {
 		return fmt.Errorf("error HandShake:%w", err)
 	}
 	a.WriteText("system", "CONNECTED")
