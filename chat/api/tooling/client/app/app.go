@@ -38,7 +38,7 @@ func NewApp(client *Client, contacts *Contacts) *App {
 	list.SetBorder(true)
 	list.SetTitle("Users")
 	//清除文本 切换聊天界面
-	list.SetChangedFunc(func(index int, name string, id string, shortcut rune) {
+	list.SetChangedFunc(func(idx int, name string, id string, shortcut rune) {
 		textview.Clear()
 		user, err := contacts.LookupContact(id)
 		if err != nil {
@@ -53,6 +53,7 @@ func NewApp(client *Client, contacts *Contacts) *App {
 				fmt.Fprintln(textview, "-----")
 			}
 		}
+		list.SetItemText(idx, user.Name, user.ID)
 	})
 	users := contacts.Contacts()
 	for i, user := range users {
@@ -134,7 +135,8 @@ func (a *App) WriteText(id string, msg string) {
 		fmt.Fprintln(a.textview, "-----")
 		fmt.Fprintln(a.textview, msg)
 	default:
-		_, currentID := a.list.GetItemText(a.list.GetCurrentItem())
+		idx := a.list.GetCurrentItem()
+		name, currentID := a.list.GetItemText(idx)
 		if currentID == "" {
 			fmt.Fprintln(a.textview, "-----")
 			fmt.Fprintln(a.textview, "id not found"+":"+id)
@@ -145,7 +147,7 @@ func (a *App) WriteText(id string, msg string) {
 			fmt.Fprintln(a.textview, msg)
 			return
 		}
-
+		a.list.SetItemText(idx, "*"+name, id)
 	}
 
 }
@@ -161,7 +163,7 @@ func (a *App) ButtonHandler() {
 		a.WriteText("system", fmt.Sprintf("Error Send msg:%s", err))
 		return
 	}
-
+	a.textArea.SetText("", false)
 }
 
 func (a *App) FindName(id string) string {

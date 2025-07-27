@@ -82,6 +82,8 @@ func (c *Contacts) LookupContact(id string) (User, error) {
 	return u, nil
 }
 func (c *Contacts) AddContact(id string, name string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	doc, err := readConfig(c.fileName)
 	if err != nil {
 		return fmt.Errorf("addcontact readConfig:%w", err)
