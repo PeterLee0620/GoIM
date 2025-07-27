@@ -27,7 +27,7 @@ type Contacts struct {
 const configFileName = "config.json"
 
 func NewContacts(filePath string) (*Contacts, error) {
-
+	os.Mkdir(filepath.Join(filePath, "contacts"), os.ModePerm)
 	fileName := filepath.Join(filePath, configFileName)
 	var doc document
 	_, err := os.Stat(fileName)
@@ -146,6 +146,7 @@ func (c *Contacts) readMessage(id string) error {
 		s := scanner.Text()
 		u.Messages = append(u.Messages, s)
 	}
+	c.contacts[id] = u
 	return nil
 }
 
