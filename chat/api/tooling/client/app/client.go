@@ -14,6 +14,7 @@ type Client struct {
 	url      string
 	id       string
 	contacts *Contacts
+	uiWrite  UIScreenWrite
 }
 
 // ============================================================================
@@ -39,6 +40,7 @@ func (c *Client) HandShake(name string, uiWrite UIScreenWrite, uiUpdateContact U
 		return fmt.Errorf("dial:%w", err)
 	}
 	c.conn = conn
+	c.uiWrite = uiWrite
 	//----------------------------------------------------------------
 	//读取服务端发出的信息，若为Hello则成功
 	_, msg, err := conn.ReadMessage()
@@ -97,11 +99,12 @@ func (c *Client) HandShake(name string, uiWrite UIScreenWrite, uiUpdateContact U
 			default:
 				outMsg.From.Name = user.Name
 			}
-			if err := c.contacts.AddMessage(outMsg.From.ID, outMsg.Msg); err != nil {
+			message := formatMessage(user.Name, outMsg.Msg)
+			if err := c.contacts.AddMessage(outMsg.From.ID, message); err != nil {
 				uiWrite("system", fmt.Sprintf("add message err:%s", err))
 				return
 			}
-			uiWrite(outMsg.From.ID, outMsg.Msg)
+			uiWrite(outMsg.From.ID, message)
 
 		}
 	}()
@@ -121,6 +124,13 @@ func (c *Client) Send(to string, msg string) error {
 	if err := c.conn.WriteMessage(websocket.TextMessage, data2); err != nil {
 		return fmt.Errorf("writeUI:%w", err)
 	}
+
+	message := formatMessage("You", msg)
+	if err := c.contacts.AddMessage(to, message); err != nil {
+		return fmt.Errorf("add message err:%s", err)
+	}
+	c.uiWrite(to, message)
+
 	return nil
 }
 

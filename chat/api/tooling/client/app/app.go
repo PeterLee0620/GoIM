@@ -129,17 +129,23 @@ func (a *App) Run() error {
 
 func (a *App) WriteText(id string, msg string) {
 	a.textview.ScrollToEnd()
+	switch id {
+	case "system", "You":
+		fmt.Fprintln(a.textview, "-----")
+		fmt.Fprintln(a.textview, msg)
+	default:
+		_, currentID := a.list.GetItemText(a.list.GetCurrentItem())
+		if currentID == "" {
+			fmt.Fprintln(a.textview, "-----")
+			fmt.Fprintln(a.textview, "id not found"+":"+id)
+			return
+		}
+		if currentID == id {
+			fmt.Fprintln(a.textview, "-----")
+			fmt.Fprintln(a.textview, msg)
+			return
+		}
 
-	name, foundID := a.list.GetItemText(a.list.GetCurrentItem())
-	if foundID == "" {
-		fmt.Fprintln(a.textview, "-----")
-		fmt.Fprintln(a.textview, "id not found"+":"+id)
-		return
-	}
-	if foundID == id {
-		fmt.Fprintln(a.textview, "-----")
-		fmt.Fprintln(a.textview, name+":"+msg)
-		return
 	}
 
 }
@@ -155,8 +161,7 @@ func (a *App) ButtonHandler() {
 		a.WriteText("system", fmt.Sprintf("Error Send msg:%s", err))
 		return
 	}
-	a.textArea.SetText("", false)
-	a.WriteText("You", msg)
+
 }
 
 func (a *App) FindName(id string) string {
