@@ -136,7 +136,7 @@ func (a *App) WriteText(id string, msg string) {
 		fmt.Fprintln(a.textview, msg)
 	default:
 		idx := a.list.GetCurrentItem()
-		name, currentID := a.list.GetItemText(idx)
+		_, currentID := a.list.GetItemText(idx)
 		if currentID == "" {
 			fmt.Fprintln(a.textview, "-----")
 			fmt.Fprintln(a.textview, "id not found"+":"+id)
@@ -147,7 +147,15 @@ func (a *App) WriteText(id string, msg string) {
 			fmt.Fprintln(a.textview, msg)
 			return
 		}
-		a.list.SetItemText(idx, "*"+name, id)
+		for i := range a.list.GetItemCount() {
+			name, idStr := a.list.GetItemText(i)
+			if idStr == id {
+				a.list.SetItemText(i, "*"+name, id)
+				a.app.Draw()
+				return
+			}
+		}
+
 	}
 
 }
@@ -164,17 +172,6 @@ func (a *App) ButtonHandler() {
 		return
 	}
 	a.textArea.SetText("", false)
-}
-
-func (a *App) FindName(id string) string {
-	for i := 0; i < a.list.GetItemCount(); i++ {
-		name, toIDStr := a.list.GetItemText(i)
-		if id == toIDStr {
-			return name
-		}
-	}
-
-	return ""
 }
 
 func (a *App) UpdateContact(id string, name string) {
