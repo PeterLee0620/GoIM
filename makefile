@@ -9,7 +9,7 @@ hack:
 run-cap:
 	go run chat/api/services/cap/main.go | go run chat/api/tooling/logfmt/main.go
 run-client:
-	go run chat/api/tooling/client/main.go 
+	go run chat/api/frontends/client/main.go 
 chat-test:
 	curl -i -X GET http://localhost:3000/test
 chat-docker:

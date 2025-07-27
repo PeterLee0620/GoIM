@@ -137,7 +137,7 @@ func (c *Contacts) readMessage(id string) error {
 
 	f, err := os.Open(fileName)
 	if err != nil {
-		return fmt.Errorf("readMessage open:%w", err)
+		return nil
 	}
 	defer f.Close()
 	scanner := bufio.NewScanner(f)
