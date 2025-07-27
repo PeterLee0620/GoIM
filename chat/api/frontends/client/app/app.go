@@ -40,6 +40,13 @@ func NewApp(client *Client, contacts *Contacts) *App {
 	//清除文本 切换聊天界面
 	list.SetChangedFunc(func(idx int, name string, id string, shortcut rune) {
 		textview.Clear()
+		err := contacts.readMessage(id)
+		if err != nil {
+			textview.ScrollToEnd()
+			fmt.Fprintln(textview, "-----")
+			fmt.Fprintln(textview, name+":"+err.Error())
+		}
+
 		user, err := contacts.LookupContact(id)
 		if err != nil {
 			textview.ScrollToEnd()

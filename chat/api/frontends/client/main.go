@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/DavidLee0620/GoIM/chat/api/tooling/client/app"
+	"github.com/DavidLee0620/GoIM/chat/api/frontends/client/app"
 )
 
 /*

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"math/rand/v2"
@@ -20,6 +21,7 @@ type Contacts struct {
 	contacts map[string]User
 	mu       sync.RWMutex
 	fileName string
+	filePath string
 }
 
 const configFileName = "config.json"
@@ -52,6 +54,7 @@ func NewContacts(filePath string) (*Contacts, error) {
 		},
 		contacts: contacts,
 		fileName: fileName,
+		filePath: filePath,
 	}
 	return &cfg, nil
 
@@ -104,20 +107,73 @@ func (c *Contacts) AddContact(id string, name string) error {
 	}
 	return nil
 }
-func (c *Contacts) AddMessage(id string, Messages string) error {
+func (c *Contacts) AddMessage(id string, msg string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	u, exists := c.contacts[id]
 	if !exists {
 		return fmt.Errorf("contact not found")
 	}
-	u.Messages = append(u.Messages, Messages)
+	u.Messages = append(u.Messages, msg)
 	c.contacts[id] = u
+	if err := c.writeMessage(id, msg); err != nil {
+		return fmt.Errorf("addmessage writeMessage:%w", err)
+	}
 	return nil
 }
 
 // =======================================
+func (c *Contacts) readMessage(id string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	u, exists := c.contacts[id]
+	if !exists {
+		return fmt.Errorf("contact not found")
+	}
+	if len(u.Messages) > 0 {
+		return nil
+	}
+	fileName := filepath.Join(c.filePath, "contacts", id+".msg")
 
+	f, err := os.Open(fileName)
+	if err != nil {
+		return fmt.Errorf("readMessage open:%w", err)
+	}
+	defer f.Close()
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		//获取当前行文本。
+		s := scanner.Text()
+		u.Messages = append(u.Messages, s)
+	}
+	return nil
+}
+
+func (c *Contacts) writeMessage(id string, msg string) error {
+	var f *os.File
+	fileName := filepath.Join(c.filePath, "contacts", id+".msg")
+	_, err := os.Stat(fileName)
+	switch {
+	case err != nil:
+		f, err = os.Create(fileName)
+		if err != nil {
+			return fmt.Errorf("message file create: %w", err)
+		}
+
+	default:
+		f, err = os.OpenFile(fileName, os.O_APPEND|os.O_WRONLY, 0644)
+		if err != nil {
+			return fmt.Errorf("message file open: %w", err)
+		}
+	}
+	defer f.Close()
+	if _, err := f.WriteString(msg + "\n"); err != nil {
+		return fmt.Errorf("message file write: %w", err)
+	}
+	return nil
+}
+
+// =======================================
 type docUser struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
