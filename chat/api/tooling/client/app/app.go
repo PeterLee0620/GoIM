@@ -131,7 +131,7 @@ func (a *App) Run() error {
 func (a *App) WriteText(id string, msg string) {
 	a.textview.ScrollToEnd()
 	switch id {
-	case "system", "You":
+	case "system":
 		fmt.Fprintln(a.textview, "-----")
 		fmt.Fprintln(a.textview, msg)
 	default:

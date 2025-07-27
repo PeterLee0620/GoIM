@@ -99,7 +99,7 @@ func (c *Client) HandShake(name string, uiWrite UIScreenWrite, uiUpdateContact U
 			default:
 				outMsg.From.Name = user.Name
 			}
-			message := formatMessage(user.Name, outMsg.Msg)
+			message := formatMessage(outMsg.From.Name, outMsg.Msg)
 			if err := c.contacts.AddMessage(outMsg.From.ID, message); err != nil {
 				uiWrite("system", fmt.Sprintf("add message err:%s", err))
 				return
