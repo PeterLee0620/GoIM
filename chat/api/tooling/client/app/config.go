@@ -3,7 +3,7 @@ package app
 import (
 	"encoding/json"
 	"fmt"
-	"math/rand"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"sync"
@@ -12,10 +12,6 @@ import (
 type User struct {
 	ID   string
 	Name string
-}
-type Users struct {
-	User     User
-	Contacts map[string]User
 }
 
 type Config struct {
@@ -86,11 +82,14 @@ func (c *Config) AddContact(id string, name string) error {
 	if err != nil {
 		return fmt.Errorf("addcontact readConfig:%w", err)
 	}
-	doc.Contacts = append(doc.Contacts, docUser(User{
-		ID:   id,
-		Name: name,
-	}))
-	writeConfig(c.fileName, doc)
+	newDocUser := docUser(User{ID: id, Name: name})
+	doc.Contacts = append(doc.Contacts, newDocUser)
+	if err := writeConfig(c.fileName, doc); err != nil { // 检查写入错误
+		return fmt.Errorf("addcontact writeConfig:%w", err)
+	}
+
+	// 更新内存中的 contacts map
+	c.contacts[id] = User(newDocUser)
 	return nil
 }
 
@@ -142,14 +141,11 @@ func createConfig(fileName string) (document, error) {
 		return document{}, fmt.Errorf("config file Create: %w", err)
 	}
 	defer f.Close()
-	name, _ := os.Hostname()
-	if name == "" {
-		name = "unknown"
-	}
+
 	doc := document{
 		User: docUser{
-			Name: name,
-			ID:   fmt.Sprintf("%d", rand.Intn(99999)),
+			Name: "Anonymous",
+			ID:   fmt.Sprintf("%d", rand.IntN(99999)),
 		},
 		Contacts: []docUser{},
 	}

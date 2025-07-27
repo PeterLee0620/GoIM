@@ -7,6 +7,25 @@ import (
 	"github.com/DavidLee0620/GoIM/chat/api/tooling/client/app"
 )
 
+/*
+	 SAMPLE CONFIG FILE : chat/zarf/config.json
+		{
+			"user": {
+				"id": "<user_id>",
+				"name": "<user_name>"
+			},
+			"contacts": [
+				{
+					"id": "20723",
+					"name": "Kevin Enriquez"
+				},
+				{
+					"id": "58365",
+					"name": "Bill Kennedy"
+				}
+			]
+		}
+*/
 const (
 	url            = "ws://localhost:3000/connect"
 	configFilePath = "chat/zarf/"

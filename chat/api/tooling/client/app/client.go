@@ -86,7 +86,7 @@ func (c *Client) HandShake(name string, uiWrite UIScreenWrite, uiUpdateContact U
 				uiWrite("system", fmt.Sprintf("unmarshal err:%s", err))
 				return
 			}
-			user, err := c.cfg.LookupContact(outMsg.From.Name)
+			user, err := c.cfg.LookupContact(outMsg.From.ID)
 			switch {
 			case err != nil:
 				if err := c.cfg.AddContact(outMsg.From.ID, outMsg.From.Name); err != nil {
