@@ -18,10 +18,8 @@ import (
 // ZeroHash represents a hash code of zeros.
 const ZeroHash string = "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-// ardanID is an arbitrary number for signing messages. This will make it
-// clear that the signature comes from the Ardan blockchain.
-// Ethereum and Bitcoin do this as well, but they use the value of 27.
-const ardanID = 29
+// ethID is an arbitrary number for signing messages.
+const ethID = 27
 
 // =============================================================================
 
@@ -75,7 +73,7 @@ func Sign(value any, privateKey *ecdsa.PrivateKey) (v, r, s *big.Int, err error)
 func VerifySignature(v, r, s *big.Int) error {
 
 	// Check the recovery id is either 0 or 1.
-	uintV := v.Uint64() - ardanID
+	uintV := v.Uint64() - ethID
 	if uintV != 0 && uintV != 1 {
 		return errors.New("invalid recovery id")
 	}
@@ -143,7 +141,7 @@ func ToSignatureBytes(v, r, s *big.Int) []byte {
 	s.FillBytes(sBytes)
 	copy(sig[32:], sBytes)
 
-	sig[64] = byte(v.Uint64() - ardanID)
+	sig[64] = byte(v.Uint64() - ethID)
 
 	return sig
 }
@@ -171,7 +169,7 @@ func stamp(value any) ([]byte, error) {
 
 	// This stamp is used so signatures we produce when signing data
 	// are always unique to the Ardan blockchain.
-	stamp := fmt.Appendf(nil, "\x19Ardan Signed Message:\n%d", len(v))
+	stamp := fmt.Appendf(nil, "\x19Ethereum Signed Message:\n%d", len(v))
 
 	// Hash the stamp and txHash together in a final 32 byte array
 	// that represents the data.
@@ -184,7 +182,7 @@ func stamp(value any) ([]byte, error) {
 func toSignatureValues(sig []byte) (v, r, s *big.Int) {
 	r = big.NewInt(0).SetBytes(sig[:32])
 	s = big.NewInt(0).SetBytes(sig[32:64])
-	v = big.NewInt(0).SetBytes([]byte{sig[64] + ardanID})
+	v = big.NewInt(0).SetBytes([]byte{sig[64] + ethID})
 
 	return v, r, s
 }
