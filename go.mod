@@ -4,6 +4,7 @@ go 1.23.4
 
 require (
 	github.com/ardanlabs/conf/v3 v3.8.0
+	github.com/ethereum/go-ethereum v1.16.1
 	github.com/gdamore/tcell/v2 v2.8.1
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
@@ -12,7 +13,9 @@ require (
 )
 
 require (
+	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1 // indirect
 	github.com/gdamore/encoding v1.0.1 // indirect
+	github.com/holiman/uint256 v1.3.2 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect

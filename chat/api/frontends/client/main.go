@@ -28,7 +28,7 @@ import (
 */
 const (
 	url            = "ws://localhost:3000/connect"
-	configFilePath = "chat/zarf/"
+	configFilePath = "chat/zarf/client"
 )
 
 func main() {
