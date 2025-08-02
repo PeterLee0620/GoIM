@@ -7,18 +7,19 @@ import (
 
 	"github.com/DavidLee0620/GoIM/chat/app/sdk/chat"
 	"github.com/DavidLee0620/GoIM/chat/foundation/logger"
+	"github.com/ethereum/go-ethereum/common"
 )
 
 type Pongs struct {
 	log   *logger.Logger
-	users map[string]time.Time
+	users map[common.Address]time.Time
 	mu    sync.RWMutex
 }
 
 func New(log *logger.Logger) *Pongs {
 	p := Pongs{
 		log:   log,
-		users: make(map[string]time.Time),
+		users: make(map[common.Address]time.Time),
 	}
 	return &p
 }

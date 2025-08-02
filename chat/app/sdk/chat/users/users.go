@@ -7,18 +7,19 @@ import (
 
 	"github.com/DavidLee0620/GoIM/chat/app/sdk/chat"
 	"github.com/DavidLee0620/GoIM/chat/foundation/logger"
+	"github.com/ethereum/go-ethereum/common"
 )
 
 type Users struct {
 	log     *logger.Logger
-	users   map[string]chat.User
+	users   map[common.Address]chat.User
 	muUsers sync.RWMutex
 }
 
 func New(log *logger.Logger) *Users {
 	u := Users{
 		log:   log,
-		users: make(map[string]chat.User),
+		users: make(map[common.Address]chat.User),
 	}
 
 	return &u
@@ -36,7 +37,7 @@ func (u *Users) AddUser(ctx context.Context, usr chat.User) error {
 
 	return nil
 }
-func (u *Users) UpdateLastPing(ctx context.Context, usrID string) error {
+func (u *Users) UpdateLastPing(ctx context.Context, usrID common.Address) error {
 	u.muUsers.Lock()
 	defer u.muUsers.Unlock()
 	usr, exists := u.users[usrID]
@@ -49,7 +50,7 @@ func (u *Users) UpdateLastPing(ctx context.Context, usrID string) error {
 
 	return nil
 }
-func (u *Users) UpdateLastPong(ctx context.Context, usrID string) (chat.User, error) {
+func (u *Users) UpdateLastPong(ctx context.Context, usrID common.Address) (chat.User, error) {
 	u.muUsers.Lock()
 	defer u.muUsers.Unlock()
 	usr, exists := u.users[usrID]
@@ -62,7 +63,7 @@ func (u *Users) UpdateLastPong(ctx context.Context, usrID string) (chat.User, er
 
 	return usr, nil
 }
-func (u *Users) RemoveUser(ctx context.Context, userID string) {
+func (u *Users) RemoveUser(ctx context.Context, userID common.Address) {
 	u.muUsers.Lock()
 	defer u.muUsers.Unlock()
 	usr, exists := u.users[userID]
@@ -75,11 +76,11 @@ func (u *Users) RemoveUser(ctx context.Context, userID string) {
 
 }
 
-func (u *Users) Connections() map[string]chat.Connection {
+func (u *Users) Connections() map[common.Address]chat.Connection {
 
 	u.muUsers.RLock()
 	defer u.muUsers.RUnlock()
-	m := make(map[string]chat.Connection)
+	m := make(map[common.Address]chat.Connection)
 	for id, usr := range u.users {
 		m[id] = chat.Connection{
 			Conn:     usr.Conn,
@@ -91,7 +92,7 @@ func (u *Users) Connections() map[string]chat.Connection {
 	return m
 }
 
-func (u *Users) Retrieve(ctx context.Context, userID string) (chat.User, error) {
+func (u *Users) Retrieve(ctx context.Context, userID common.Address) (chat.User, error) {
 	u.muUsers.RLock()
 	defer u.muUsers.RUnlock()
 	usr, exists := u.users[userID]

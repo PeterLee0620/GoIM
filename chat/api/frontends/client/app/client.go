@@ -119,18 +119,26 @@ func (c *Client) HandShake(name string, uiWrite UIScreenWrite, uiUpdateContact U
 
 func (c *Client) Send(to common.Address, msg string) error {
 
-	v, r, s, err := signature.Sign(msg, c.privateKey)
+	dataToSign := struct {
+		ToID  common.Address
+		Msg   string
+		Nonce uint64
+	}{
+		ToID:  to,
+		Msg:   msg,
+		Nonce: 1,
+	}
+	v, r, s, err := signature.Sign(dataToSign, c.privateKey)
 	if err != nil {
 		return fmt.Errorf("send Sign:%w", err)
 	}
 	outMsg := outgoingMessage{
-		ToID:   to,
-		Msg:    msg,
-		Nonce:  1,
-		FromID: c.id,
-		V:      v,
-		R:      r,
-		S:      s,
+		ToID:  to,
+		Msg:   msg,
+		Nonce: 1,
+		V:     v,
+		R:     r,
+		S:     s,
 	}
 	data, err := json.Marshal(&outMsg)
 	if err != nil {
@@ -151,13 +159,12 @@ func (c *Client) Send(to common.Address, msg string) error {
 }
 
 type outgoingMessage struct {
-	FromID common.Address `json:"fromID"`
-	ToID   common.Address `json:"toID"`
-	Msg    string         `json:"msg"`
-	Nonce  uint64         `json:"nonce"`
-	V      *big.Int       `json:"v"`
-	R      *big.Int       `json:"r"`
-	S      *big.Int       `json:"s"`
+	ToID  common.Address `json:"toID"`
+	Msg   string         `json:"msg"`
+	Nonce uint64         `json:"nonce"`
+	V     *big.Int       `json:"v"`
+	R     *big.Int       `json:"r"`
+	S     *big.Int       `json:"s"`
 }
 type incomingMessage struct {
 	From user   `json:"from"`
