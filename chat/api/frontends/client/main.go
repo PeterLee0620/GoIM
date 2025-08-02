@@ -8,7 +8,7 @@ import (
 )
 
 /*
-	 SAMPLE CONFIG FILE : chat/zarf/config.json
+	 SAMPLE CONFIG FILE : chat/zarf/client/config.json
 		{
 			"user": {
 				"id": "<user_id>",
