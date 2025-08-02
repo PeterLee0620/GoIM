@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/gorilla/websocket"
 )
 
@@ -12,13 +13,13 @@ type UIUpdateContact func(id string, name string)
 type Client struct {
 	conn     *websocket.Conn
 	url      string
-	id       string
+	id       common.Address
 	contacts *Contacts
 	uiWrite  UIScreenWrite
 }
 
 // ============================================================================
-func New(id string, url string, contacts *Contacts) *Client {
+func New(id common.Address, url string, contacts *Contacts) *Client {
 
 	clt := Client{
 		url:      url,
@@ -53,7 +54,7 @@ func (c *Client) HandShake(name string, uiWrite UIScreenWrite, uiUpdateContact U
 	//----------------------------------------------------------------
 	//创建uuid和name的结构体，序列化后发送
 	user := struct {
-		ID   string
+		ID   common.Address
 		Name string
 	}{
 		ID:   c.id,
@@ -95,7 +96,7 @@ func (c *Client) HandShake(name string, uiWrite UIScreenWrite, uiUpdateContact U
 					uiWrite("system", fmt.Sprintf("add contact err:%s", err))
 					return
 				}
-				uiUpdateContact(outMsg.From.ID, outMsg.From.Name)
+				uiUpdateContact(outMsg.From.ID.Hex(), outMsg.From.Name)
 			default:
 				outMsg.From.Name = user.Name
 			}
@@ -104,14 +105,14 @@ func (c *Client) HandShake(name string, uiWrite UIScreenWrite, uiUpdateContact U
 				uiWrite("system", fmt.Sprintf("add message err:%s", err))
 				return
 			}
-			uiWrite(outMsg.From.ID, message)
+			uiWrite(outMsg.From.ID.Hex(), message)
 
 		}
 	}()
 	return nil
 }
 
-func (c *Client) Send(to string, msg string) error {
+func (c *Client) Send(to common.Address, msg string) error {
 	inMsg := inMessage{
 		ToID: to,
 		Msg:  msg,
@@ -129,14 +130,14 @@ func (c *Client) Send(to string, msg string) error {
 	if err := c.contacts.AddMessage(to, message); err != nil {
 		return fmt.Errorf("add message err:%s", err)
 	}
-	c.uiWrite(to, message)
+	c.uiWrite(to.Hex(), message)
 
 	return nil
 }
 
 type inMessage struct {
-	ToID string `json:"toID"`
-	Msg  string `json:"msg"`
+	ToID common.Address `json:"toID"`
+	Msg  string         `json:"msg"`
 }
 type outMessage struct {
 	From user   `json:"from"`
@@ -144,6 +145,6 @@ type outMessage struct {
 }
 
 type user struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID   common.Address `json:"id"`
+	Name string         `json:"name"`
 }

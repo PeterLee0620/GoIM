@@ -4,21 +4,22 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/ethereum/go-ethereum/common"
 )
 
 type User struct {
-	ID       string
+	ID       common.Address
 	Name     string
 	Messages []string
 }
 
 type Contacts struct {
 	me       User
-	contacts map[string]User
+	contacts map[common.Address]User
 	mu       sync.RWMutex
 	fileName string
 	filePath string
@@ -26,21 +27,24 @@ type Contacts struct {
 
 const configFileName = "config.json"
 
-func NewContacts(filePath string) (*Contacts, error) {
+func NewContacts(filePath string, id common.Address) (*Contacts, error) {
 	os.Mkdir(filepath.Join(filePath, "contacts"), os.ModePerm)
 	fileName := filepath.Join(filePath, configFileName)
 	var doc document
 	_, err := os.Stat(fileName)
 	switch {
 	case err != nil:
-		doc, err = createConfig(fileName)
+		doc, err = createConfig(fileName, id)
 	default:
 		doc, err = readConfig(fileName)
+		if doc.User.ID != id {
+			return nil, fmt.Errorf("id mismatch: %w", err)
+		}
 	}
 	if err != nil {
 		return nil, fmt.Errorf("config file error: %w", err)
 	}
-	contacts := make(map[string]User, len(doc.Contacts))
+	contacts := make(map[common.Address]User, len(doc.Contacts))
 	for _, user := range doc.Contacts {
 		contacts[user.ID] = User{
 			ID:   user.ID,
@@ -75,7 +79,7 @@ func (c *Contacts) Contacts() []User {
 
 	return users
 }
-func (c *Contacts) LookupContact(id string) (User, error) {
+func (c *Contacts) LookupContact(id common.Address) (User, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	u, exists := c.contacts[id]
@@ -84,7 +88,7 @@ func (c *Contacts) LookupContact(id string) (User, error) {
 	}
 	return u, nil
 }
-func (c *Contacts) AddContact(id string, name string) error {
+func (c *Contacts) AddContact(id common.Address, name string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	doc, err := readConfig(c.fileName)
@@ -107,7 +111,7 @@ func (c *Contacts) AddContact(id string, name string) error {
 	}
 	return nil
 }
-func (c *Contacts) AddMessage(id string, msg string) error {
+func (c *Contacts) AddMessage(id common.Address, msg string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	u, exists := c.contacts[id]
@@ -123,7 +127,7 @@ func (c *Contacts) AddMessage(id string, msg string) error {
 }
 
 // =======================================
-func (c *Contacts) readMessage(id string) error {
+func (c *Contacts) readMessage(id common.Address) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	u, exists := c.contacts[id]
@@ -133,7 +137,7 @@ func (c *Contacts) readMessage(id string) error {
 	if len(u.Messages) > 0 {
 		return nil
 	}
-	fileName := filepath.Join(c.filePath, "contacts", id+".msg")
+	fileName := filepath.Join(c.filePath, "contacts", id.Hex()+".msg")
 
 	f, err := os.Open(fileName)
 	if err != nil {
@@ -150,9 +154,9 @@ func (c *Contacts) readMessage(id string) error {
 	return nil
 }
 
-func (c *Contacts) writeMessage(id string, msg string) error {
+func (c *Contacts) writeMessage(id common.Address, msg string) error {
 	var f *os.File
-	fileName := filepath.Join(c.filePath, "contacts", id+".msg")
+	fileName := filepath.Join(c.filePath, "contacts", id.Hex()+".msg")
 	_, err := os.Stat(fileName)
 	switch {
 	case err != nil:
@@ -176,8 +180,8 @@ func (c *Contacts) writeMessage(id string, msg string) error {
 
 // =======================================
 type docUser struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID   common.Address `json:"id"`
+	Name string         `json:"name"`
 }
 type document struct {
 	User     docUser   `json:"user"`
@@ -213,7 +217,7 @@ func writeConfig(fileName string, doc document) error {
 	return nil
 }
 
-func createConfig(fileName string) (document, error) {
+func createConfig(fileName string, id common.Address) (document, error) {
 	filePath := filepath.Dir(fileName)
 	os.MkdirAll(filePath, os.ModePerm)
 	f, err := os.Create(fileName)
@@ -225,7 +229,7 @@ func createConfig(fileName string) (document, error) {
 	doc := document{
 		User: docUser{
 			Name: "Anonymous",
-			ID:   fmt.Sprintf("%d", rand.IntN(99999)),
+			ID:   id,
 		},
 		Contacts: []docUser{},
 	}

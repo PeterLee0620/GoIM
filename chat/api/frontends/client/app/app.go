@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -40,14 +41,15 @@ func NewApp(client *Client, contacts *Contacts) *App {
 	//清除文本 切换聊天界面
 	list.SetChangedFunc(func(idx int, name string, id string, shortcut rune) {
 		textview.Clear()
-		err := contacts.readMessage(id)
+		addrID := common.HexToAddress(id)
+		err := contacts.readMessage(addrID)
 		if err != nil {
 			textview.ScrollToEnd()
 			fmt.Fprintln(textview, "-----")
 			fmt.Fprintln(textview, name+":"+err.Error())
 		}
 
-		user, err := contacts.LookupContact(id)
+		user, err := contacts.LookupContact(addrID)
 		if err != nil {
 			textview.ScrollToEnd()
 			fmt.Fprintln(textview, "-----")
@@ -60,12 +62,12 @@ func NewApp(client *Client, contacts *Contacts) *App {
 				fmt.Fprintln(textview, "-----")
 			}
 		}
-		list.SetItemText(idx, user.Name, user.ID)
+		list.SetItemText(idx, user.Name, user.ID.Hex())
 	})
 	users := contacts.Contacts()
 	for i, user := range users {
 		shortcut := rune(i + 49)
-		list.AddItem(user.Name, user.ID, shortcut, nil)
+		list.AddItem(user.Name, user.ID.Hex(), shortcut, nil)
 	}
 	// -------------------------------------------------------------------------
 
@@ -174,7 +176,8 @@ func (a *App) ButtonHandler() {
 	if msg == "" {
 		return
 	}
-	if err := a.client.Send(to, msg); err != nil {
+
+	if err := a.client.Send(common.HexToAddress(to), msg); err != nil {
 		a.WriteText("system", fmt.Sprintf("Error Send msg:%s", err))
 		return
 	}
