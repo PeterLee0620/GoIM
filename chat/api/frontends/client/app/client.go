@@ -1,9 +1,12 @@
 package app
 
 import (
+	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
+	"math/big"
 
+	"github.com/DavidLee0620/GoIM/chat/foundation/signature"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gorilla/websocket"
 )
@@ -11,20 +14,22 @@ import (
 type UIScreenWrite func(id string, msg string)
 type UIUpdateContact func(id string, name string)
 type Client struct {
-	conn     *websocket.Conn
-	url      string
-	id       common.Address
-	contacts *Contacts
-	uiWrite  UIScreenWrite
+	conn       *websocket.Conn
+	url        string
+	id         common.Address
+	contacts   *Contacts
+	uiWrite    UIScreenWrite
+	privateKey *ecdsa.PrivateKey
 }
 
 // ============================================================================
-func New(id common.Address, url string, contacts *Contacts) *Client {
+func New(id common.Address, privateKey *ecdsa.PrivateKey, url string, contacts *Contacts) *Client {
 
 	clt := Client{
-		url:      url,
-		id:       id,
-		contacts: contacts,
+		url:        url,
+		id:         id,
+		contacts:   contacts,
+		privateKey: privateKey,
 	}
 	return &clt
 }
@@ -84,28 +89,28 @@ func (c *Client) HandShake(name string, uiWrite UIScreenWrite, uiUpdateContact U
 				uiWrite("system", fmt.Sprintf("read err:%s", err))
 				return
 			}
-			var outMsg outMessage
-			if err := json.Unmarshal(msg, &outMsg); err != nil {
+			var inMsg incomingMessage
+			if err := json.Unmarshal(msg, &inMsg); err != nil {
 				uiWrite("system", fmt.Sprintf("unmarshal err:%s", err))
 				return
 			}
-			user, err := c.contacts.LookupContact(outMsg.From.ID)
+			user, err := c.contacts.LookupContact(inMsg.From.ID)
 			switch {
 			case err != nil:
-				if err := c.contacts.AddContact(outMsg.From.ID, outMsg.From.Name); err != nil {
+				if err := c.contacts.AddContact(inMsg.From.ID, inMsg.From.Name); err != nil {
 					uiWrite("system", fmt.Sprintf("add contact err:%s", err))
 					return
 				}
-				uiUpdateContact(outMsg.From.ID.Hex(), outMsg.From.Name)
+				uiUpdateContact(inMsg.From.ID.Hex(), inMsg.From.Name)
 			default:
-				outMsg.From.Name = user.Name
+				inMsg.From.Name = user.Name
 			}
-			message := formatMessage(outMsg.From.Name, outMsg.Msg)
-			if err := c.contacts.AddMessage(outMsg.From.ID, message); err != nil {
+			message := formatMessage(inMsg.From.Name, inMsg.Msg)
+			if err := c.contacts.AddMessage(inMsg.From.ID, message); err != nil {
 				uiWrite("system", fmt.Sprintf("add message err:%s", err))
 				return
 			}
-			uiWrite(outMsg.From.ID.Hex(), message)
+			uiWrite(inMsg.From.ID.Hex(), message)
 
 		}
 	}()
@@ -113,16 +118,26 @@ func (c *Client) HandShake(name string, uiWrite UIScreenWrite, uiUpdateContact U
 }
 
 func (c *Client) Send(to common.Address, msg string) error {
-	inMsg := inMessage{
-		ToID: to,
-		Msg:  msg,
+
+	v, r, s, err := signature.Sign(msg, c.privateKey)
+	if err != nil {
+		return fmt.Errorf("send Sign:%w", err)
 	}
-	data2, err := json.Marshal(&inMsg)
+	outMsg := outgoingMessage{
+		ToID:   to,
+		Msg:    msg,
+		Nonce:  1,
+		FromID: c.id,
+		V:      v,
+		R:      r,
+		S:      s,
+	}
+	data, err := json.Marshal(&outMsg)
 	if err != nil {
 		return fmt.Errorf("json marshal:%w", err)
 	}
 
-	if err := c.conn.WriteMessage(websocket.TextMessage, data2); err != nil {
+	if err := c.conn.WriteMessage(websocket.TextMessage, data); err != nil {
 		return fmt.Errorf("writeUI:%w", err)
 	}
 
@@ -135,11 +150,16 @@ func (c *Client) Send(to common.Address, msg string) error {
 	return nil
 }
 
-type inMessage struct {
-	ToID common.Address `json:"toID"`
-	Msg  string         `json:"msg"`
+type outgoingMessage struct {
+	FromID common.Address `json:"fromID"`
+	ToID   common.Address `json:"toID"`
+	Msg    string         `json:"msg"`
+	Nonce  uint64         `json:"nonce"`
+	V      *big.Int       `json:"v"`
+	R      *big.Int       `json:"r"`
+	S      *big.Int       `json:"s"`
 }
-type outMessage struct {
+type incomingMessage struct {
 	From user   `json:"from"`
 	Msg  string `json:"msg"`
 }
