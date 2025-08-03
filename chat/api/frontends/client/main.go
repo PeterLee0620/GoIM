@@ -5,28 +5,10 @@ import (
 	"os"
 
 	"github.com/DavidLee0620/GoIM/chat/api/frontends/client/app"
-	"github.com/DavidLee0620/GoIM/chat/api/frontends/client/app/storage/dbfile"
+	dbfile "github.com/DavidLee0620/GoIM/chat/api/frontends/client/storage"
+	"github.com/DavidLee0620/GoIM/chat/api/frontends/client/ui/tui"
 )
 
-/*
-	 SAMPLE CONFIG FILE : chat/zarf/client/config.json
-		{
-			"user": {
-				"id": "<user_id>",
-				"name": "<user_name>"
-			},
-			"contacts": [
-				{
-					"id": "20723",
-					"name": "Kevin Enriquez"
-				},
-				{
-					"id": "58365",
-					"name": "Bill Kennedy"
-				}
-			]
-		}
-*/
 const (
 	url            = "ws://localhost:3000/connect"
 	configFilePath = "chat/zarf/client"
@@ -34,32 +16,42 @@ const (
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Printf("Error:%s\n", err)
+		fmt.Printf("Error: %s\n", err)
 		os.Exit(1)
 	}
 }
 
 func run() error {
-	id, privateKey, err := app.NewID(configFilePath)
+	myAccountID, privateKey, err := app.NewID(configFilePath)
 	if err != nil {
-		return fmt.Errorf("error NewID:%w", err)
+		return fmt.Errorf("id: %w", err)
 	}
 
-	db, err := dbfile.NewDB(configFilePath, id)
+	db, err := dbfile.NewDB(configFilePath, myAccountID)
 	if err != nil {
-		return fmt.Errorf("error config:%w", err)
+		return fmt.Errorf("config: %w", err)
 	}
 
-	client := app.New(id, privateKey, url, db)
-	defer client.Close()
-	a := app.NewApp(client, db)
+	// -------------------------------------------------------------------------
 
-	if err := client.HandShake(db.MyAccount().Name, a.WriteText, a.UpdateContact); err != nil {
-		return fmt.Errorf("error HandShake:%w", err)
+	ui := tui.New(myAccountID, db.Contacts())
+
+	// -------------------------------------------------------------------------
+
+	app := app.NewApp(db, ui, myAccountID, privateKey, url)
+	defer app.Close()
+
+	ui.SetApp(app)
+
+	// -------------------------------------------------------------------------
+
+	if err := app.Handshake(db.MyAccount().Name); err != nil {
+		return fmt.Errorf("handshake: %w", err)
 	}
-	a.WriteText("system", "CONNECTED")
-	if err := a.Run(); err != nil {
-		return fmt.Errorf("error running app:%w", err)
+
+	if err := app.Run(); err != nil {
+		return fmt.Errorf("run: %w", err)
 	}
+
 	return nil
 }
