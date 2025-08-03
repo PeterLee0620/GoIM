@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 
+	"github.com/DavidLee0620/GoIM/chat/api/frontends/client/app/storage/dbfile"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -16,10 +17,10 @@ type App struct {
 	client   *Client
 	list     *tview.List
 	textArea *tview.TextArea
-	contacts *Contacts
+	db       *dbfile.DB
 }
 
-func NewApp(client *Client, contacts *Contacts) *App {
+func NewApp(client *Client, db *dbfile.DB) *App {
 	app := tview.NewApplication()
 
 	// -------------------------------------------------------------------------
@@ -32,7 +33,7 @@ func NewApp(client *Client, contacts *Contacts) *App {
 		})
 
 	textview.SetBorder(true)
-	textview.SetTitle(fmt.Sprintf("*** %s ***", contacts.My().ID))
+	textview.SetTitle(fmt.Sprintf("*** %s ***", db.MyAccount().ID))
 	// -------------------------------------------------------------------------
 
 	list := tview.NewList()
@@ -42,14 +43,8 @@ func NewApp(client *Client, contacts *Contacts) *App {
 	list.SetChangedFunc(func(idx int, name string, id string, shortcut rune) {
 		textview.Clear()
 		addrID := common.HexToAddress(id)
-		err := contacts.readMessage(addrID)
-		if err != nil {
-			textview.ScrollToEnd()
-			fmt.Fprintln(textview, "-----")
-			fmt.Fprintln(textview, name+":"+err.Error())
-		}
 
-		user, err := contacts.LookupContact(addrID)
+		user, err := db.QueryContactByID(addrID)
 		if err != nil {
 			textview.ScrollToEnd()
 			fmt.Fprintln(textview, "-----")
@@ -64,7 +59,7 @@ func NewApp(client *Client, contacts *Contacts) *App {
 		}
 		list.SetItemText(idx, user.Name, user.ID.Hex())
 	})
-	users := contacts.Contacts()
+	users := db.Contacts()
 	for i, user := range users {
 		shortcut := rune(i + 49)
 		list.AddItem(user.Name, user.ID.Hex(), shortcut, nil)
@@ -118,7 +113,7 @@ func NewApp(client *Client, contacts *Contacts) *App {
 		client:   client,
 		list:     list,
 		textArea: textArea,
-		contacts: contacts,
+		db:       db,
 	}
 	button.SetSelectedFunc(a.ButtonHandler)
 	textArea.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {

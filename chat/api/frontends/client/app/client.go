@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/big"
 
+	"github.com/DavidLee0620/GoIM/chat/api/frontends/client/app/storage/dbfile"
 	"github.com/DavidLee0620/GoIM/chat/foundation/signature"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gorilla/websocket"
@@ -17,18 +18,18 @@ type Client struct {
 	conn       *websocket.Conn
 	url        string
 	id         common.Address
-	contacts   *Contacts
+	db         *dbfile.DB
 	uiWrite    UIScreenWrite
 	privateKey *ecdsa.PrivateKey
 }
 
 // ============================================================================
-func New(id common.Address, privateKey *ecdsa.PrivateKey, url string, contacts *Contacts) *Client {
+func New(id common.Address, privateKey *ecdsa.PrivateKey, url string, db *dbfile.DB) *Client {
 
 	clt := Client{
 		url:        url,
 		id:         id,
-		contacts:   contacts,
+		db:         db,
 		privateKey: privateKey,
 	}
 	return &clt
@@ -94,10 +95,11 @@ func (c *Client) HandShake(name string, uiWrite UIScreenWrite, uiUpdateContact U
 				uiWrite("system", fmt.Sprintf("unmarshal err:%s", err))
 				return
 			}
-			user, err := c.contacts.LookupContact(inMsg.From.ID)
+			user, err := c.db.QueryContactByID(inMsg.From.ID)
 			switch {
 			case err != nil:
-				if err := c.contacts.AddContact(inMsg.From.ID, inMsg.From.Name); err != nil {
+				user, err = c.db.InsertContact(inMsg.From.ID, inMsg.From.Name)
+				if err != nil {
 					uiWrite("system", fmt.Sprintf("add contact err:%s", err))
 					return
 				}
@@ -105,8 +107,8 @@ func (c *Client) HandShake(name string, uiWrite UIScreenWrite, uiUpdateContact U
 			default:
 				inMsg.From.Name = user.Name
 			}
-			message := formatMessage(inMsg.From.Name, inMsg.Msg)
-			if err := c.contacts.AddMessage(inMsg.From.ID, message); err != nil {
+			message := formatMessage(user.Name, inMsg.Msg)
+			if err := c.db.InsertMessage(inMsg.From.ID, message); err != nil {
 				uiWrite("system", fmt.Sprintf("add message err:%s", err))
 				return
 			}
@@ -150,7 +152,7 @@ func (c *Client) Send(to common.Address, msg string) error {
 	}
 
 	message := formatMessage("You", msg)
-	if err := c.contacts.AddMessage(to, message); err != nil {
+	if err := c.db.InsertMessage(to, message); err != nil {
 		return fmt.Errorf("add message err:%s", err)
 	}
 	c.uiWrite(to.Hex(), message)

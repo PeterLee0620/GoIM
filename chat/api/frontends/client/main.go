@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/DavidLee0620/GoIM/chat/api/frontends/client/app"
+	"github.com/DavidLee0620/GoIM/chat/api/frontends/client/app/storage/dbfile"
 )
 
 /*
@@ -44,16 +45,16 @@ func run() error {
 		return fmt.Errorf("error NewID:%w", err)
 	}
 
-	cfg, err := app.NewContacts(configFilePath, id)
+	db, err := dbfile.NewDB(configFilePath, id)
 	if err != nil {
 		return fmt.Errorf("error config:%w", err)
 	}
 
-	client := app.New(id, privateKey, url, cfg)
+	client := app.New(id, privateKey, url, db)
 	defer client.Close()
-	a := app.NewApp(client, cfg)
+	a := app.NewApp(client, db)
 
-	if err := client.HandShake(cfg.My().Name, a.WriteText, a.UpdateContact); err != nil {
+	if err := client.HandShake(db.MyAccount().Name, a.WriteText, a.UpdateContact); err != nil {
 		return fmt.Errorf("error HandShake:%w", err)
 	}
 	a.WriteText("system", "CONNECTED")
