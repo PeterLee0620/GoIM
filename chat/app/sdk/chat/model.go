@@ -37,7 +37,7 @@ type Connection struct {
 }
 type busMessage struct {
 	CapID    uuid.UUID      `json:"capID"`
-	FromID   common.Address `json:"from"`
+	FromID   common.Address `json:"fromID"`
 	FromName string         `json:"fromName"`
 	incomingMessage
 }

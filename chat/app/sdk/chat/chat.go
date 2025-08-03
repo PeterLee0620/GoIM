@@ -53,10 +53,12 @@ func New(log *logger.Logger, conn *nats.Conn, subject string, users Users, capID
 	if err != nil {
 		return nil, fmt.Errorf("nats new js: %w", err)
 	}
+	//js.DeleteStream(ctx, subject)
 
 	s1, err := js.CreateStream(ctx, jetstream.StreamConfig{
 		Name:     subject,
 		Subjects: []string{subject},
+		MaxAge:   24 * time.Hour,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("nats create js: %w", err)
