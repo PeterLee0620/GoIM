@@ -4,18 +4,13 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/DavidLee0620/GoIM/chat/api/frontends/client/app"
 	"github.com/ethereum/go-ethereum/common"
 )
 
-type User struct {
-	ID       common.Address
-	Name     string
-	Messages []string
-}
-
 type DB struct {
-	myAccount User
-	cache     map[common.Address]User
+	myAccount app.User
+	contacts  map[common.Address]app.User
 	mu        sync.RWMutex
 }
 
@@ -25,74 +20,74 @@ func NewDB(filePath string, myAccountID common.Address) (*DB, error) {
 		return nil, fmt.Errorf("newDB: %w", err)
 	}
 
-	cache := make(map[common.Address]User, len(df.Contacts))
+	contacts := make(map[common.Address]app.User, len(df.Contacts))
 	for _, user := range df.Contacts {
-		cache[user.ID] = User{
+		contacts[user.ID] = app.User{
 			ID:   user.ID,
 			Name: user.Name,
 		}
 	}
 
 	db := DB{
-		myAccount: User{
+		myAccount: app.User{
 			ID:   df.MyAccount.ID,
 			Name: df.MyAccount.Name,
 		},
-		cache: cache,
+		contacts: contacts,
 	}
 
 	return &db, nil
 }
 
-func (c *DB) MyAccount() User {
+func (c *DB) MyAccount() app.User {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
 	return c.myAccount
 }
 
-func (c *DB) Contacts() []User {
+func (c *DB) Contacts() []app.User {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	users := make([]User, 0, len(c.cache))
-	for _, user := range c.cache {
+	users := make([]app.User, 0, len(c.contacts))
+	for _, user := range c.contacts {
 		users = append(users, user)
 	}
 
 	return users
 }
 
-func (db *DB) QueryContactByID(id common.Address) (User, error) {
+func (db *DB) QueryContactByID(id common.Address) (app.User, error) {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 
-	u, exists := db.cache[id]
+	u, exists := db.contacts[id]
 	if !exists {
-		return User{}, fmt.Errorf("contact not found")
+		return app.User{}, fmt.Errorf("contact not found")
 	}
 
 	if len(u.Messages) == 0 {
 		msgs, err := readMsgsFromDisk(id)
 		if err != nil {
-			return User{}, fmt.Errorf("read messages: %w", err)
+			return app.User{}, fmt.Errorf("read messages: %w", err)
 		}
 
 		u.Messages = msgs
-		db.cache[id] = u
+		db.contacts[id] = u
 	}
 
 	return u, nil
 }
 
-func (db *DB) InsertContact(id common.Address, name string) (User, error) {
+func (db *DB) InsertContact(id common.Address, name string) (app.User, error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
 	// -------------------------------------------------------------------------
-	// Update in the in-memory cache of contacts.
+	// Update in the in-memory contacts of contacts.
 
-	db.cache[id] = User{
+	db.contacts[id] = app.User{
 		ID:   id,
 		Name: name,
 	}
@@ -102,7 +97,7 @@ func (db *DB) InsertContact(id common.Address, name string) (User, error) {
 
 	df, err := readDBFromDisk()
 	if err != nil {
-		return User{}, fmt.Errorf("config read: %w", err)
+		return app.User{}, fmt.Errorf("config read: %w", err)
 	}
 
 	dfu := dataFileUser{
@@ -117,7 +112,7 @@ func (db *DB) InsertContact(id common.Address, name string) (User, error) {
 	// -------------------------------------------------------------------------
 	// Return the new contact.
 
-	u := User{
+	u := app.User{
 		ID:   id,
 		Name: name,
 	}
@@ -129,13 +124,13 @@ func (db *DB) InsertMessage(id common.Address, msg string) error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
-	u, exists := db.cache[id]
+	u, exists := db.contacts[id]
 	if !exists {
 		return fmt.Errorf("contact not found")
 	}
 
 	u.Messages = append(u.Messages, msg)
-	db.cache[id] = u
+	db.contacts[id] = u
 
 	if err := flushMsgToDisk(id, msg); err != nil {
 		return fmt.Errorf("write message: %w", err)

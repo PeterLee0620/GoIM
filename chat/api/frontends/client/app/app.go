@@ -3,12 +3,16 @@ package app
 import (
 	"fmt"
 
-	"github.com/DavidLee0620/GoIM/chat/api/frontends/client/app/storage/dbfile"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
+type AppStorage interface {
+	QueryContactByID(id common.Address) (User, error)
+	MyAccount() User
+	Contacts() []User
+}
 type App struct {
 	app      *tview.Application
 	flex     *tview.Flex
@@ -17,10 +21,10 @@ type App struct {
 	client   *Client
 	list     *tview.List
 	textArea *tview.TextArea
-	db       *dbfile.DB
+	db       AppStorage
 }
 
-func NewApp(client *Client, db *dbfile.DB) *App {
+func NewApp(client *Client, db AppStorage) *App {
 	app := tview.NewApplication()
 
 	// -------------------------------------------------------------------------

@@ -6,25 +6,29 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/DavidLee0620/GoIM/chat/api/frontends/client/app/storage/dbfile"
 	"github.com/DavidLee0620/GoIM/chat/foundation/signature"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gorilla/websocket"
 )
 
+type ClientStorage interface {
+	QueryContactByID(id common.Address) (User, error)
+	InsertContact(id common.Address, name string) (User, error)
+	InsertMessage(id common.Address, msg string) error
+}
 type UIScreenWrite func(id string, msg string)
 type UIUpdateContact func(id string, name string)
 type Client struct {
 	conn       *websocket.Conn
 	url        string
 	id         common.Address
-	db         *dbfile.DB
+	db         ClientStorage
 	uiWrite    UIScreenWrite
 	privateKey *ecdsa.PrivateKey
 }
 
 // ============================================================================
-func New(id common.Address, privateKey *ecdsa.PrivateKey, url string, db *dbfile.DB) *Client {
+func New(id common.Address, privateKey *ecdsa.PrivateKey, url string, db ClientStorage) *Client {
 
 	clt := Client{
 		url:        url,
