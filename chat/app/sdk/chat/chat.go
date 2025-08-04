@@ -248,6 +248,7 @@ func (c *Chat) listenBus() func(msg jetstream.Msg) {
 	ctx := web.SetTraceID(context.Background(), uuid.New())
 
 	f := func(msg jetstream.Msg) {
+		defer msg.Ack()
 		var busMsg busMessage
 		if err := json.Unmarshal(msg.Data(), &busMsg); err != nil {
 			c.log.Info(ctx, "bus-unmarshal", "ERROR", err)
@@ -267,7 +268,7 @@ func (c *Chat) listenBus() func(msg jetstream.Msg) {
 		}{
 			ToID:      busMsg.ToID,
 			Msg:       busMsg.Msg,
-			FromNonce: busMsg.incomingMessage.FromNonce,
+			FromNonce: busMsg.FromNonce,
 		}
 
 		id, err := signature.FromAddress(dataThatWasSign, busMsg.V, busMsg.R, busMsg.S)
@@ -302,8 +303,6 @@ func (c *Chat) listenBus() func(msg jetstream.Msg) {
 		if err := c.sendMessage(from, to, busMsg.incomingMessage.FromNonce, busMsg.Msg); err != nil {
 			c.log.Info(ctx, "bus-send", "ERROR", err)
 		}
-
-		msg.Ack()
 
 		c.log.Info(ctx, "BUS: msg sent over web socket", "from", busMsg.FromID, "to", busMsg.ToID)
 	}

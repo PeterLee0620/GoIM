@@ -30,6 +30,7 @@ type Storage interface {
 	InsertContact(id common.Address, name string) (User, error)
 	InsertMessage(id common.Address, msg string) error
 	UpdateAppNonce(id common.Address, nonce uint64) error
+	UpdateContactNonce(id common.Address, nonce uint64) error
 }
 
 type UI interface {
@@ -185,7 +186,7 @@ func (app *App) ReceiveCapMessage(conn *websocket.Conn) {
 			return
 		}
 
-		if err := app.db.UpdateAppNonce(inMsg.From.ID, expNonce); err != nil {
+		if err := app.db.UpdateContactNonce(inMsg.From.ID, expNonce); err != nil {
 			app.ui.WriteText("system", fmt.Sprintf("update app nonce: %s", err))
 			return
 		}

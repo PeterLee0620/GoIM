@@ -23,8 +23,10 @@ func NewDB(filePath string, myAccountID common.Address) (*DB, error) {
 	contacts := make(map[common.Address]app.User, len(df.Contacts))
 	for _, user := range df.Contacts {
 		contacts[user.ID] = app.User{
-			ID:   user.ID,
-			Name: user.Name,
+			ID:           user.ID,
+			Name:         user.Name,
+			AppLastNonce: user.AppLastNonce,
+			LastNonce:    user.LastNonce,
 		}
 	}
 
