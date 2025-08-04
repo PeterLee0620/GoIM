@@ -156,6 +156,8 @@ func (ui *TUI) SetApp(app App) {
 	ui.list.RemoveItem(lastItem)
 	shortcut := rune(ui.list.GetItemCount() + 49)
 	ui.list.AddItem(main, secondary, shortcut, nil)
+	ui.list.SetCurrentItem(lastItem)
+	ui.list.SetCurrentItem(0)
 }
 
 func (ui *TUI) Run() error {
