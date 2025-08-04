@@ -11,7 +11,10 @@ import (
 
 type App interface {
 	SendMessageHandler(to common.Address, msg string) error
-	QueryContactHandler(id common.Address) (app.User, error)
+}
+type Storage interface {
+	Contacts() []app.User
+	QueryContactByID(id common.Address) (app.User, error)
 }
 
 // =============================================================================
@@ -24,9 +27,10 @@ type TUI struct {
 	textArea *tview.TextArea
 	button   *tview.Button
 	app      App
+	db       Storage
 }
 
-func New(myAccountID common.Address, contacts []app.User) *TUI {
+func New(myAccountID common.Address, db Storage) *TUI {
 	var ui TUI
 
 	app := tview.NewApplication()
@@ -57,7 +61,7 @@ func New(myAccountID common.Address, contacts []app.User) *TUI {
 
 		addrID := common.HexToAddress(id)
 
-		user, err := ui.app.QueryContactHandler(addrID)
+		user, err := ui.db.QueryContactByID(addrID)
 		if err != nil {
 			textView.ScrollToEnd()
 			fmt.Fprintln(textView, "-----")
@@ -75,7 +79,7 @@ func New(myAccountID common.Address, contacts []app.User) *TUI {
 		list.SetItemText(idx, user.Name, user.ID.Hex())
 	})
 
-	for i, user := range contacts {
+	for i, user := range db.Contacts() {
 		shortcut := rune(i + 49)
 		list.AddItem(user.Name, user.ID.Hex(), shortcut, nil)
 	}
@@ -126,7 +130,7 @@ func New(myAccountID common.Address, contacts []app.User) *TUI {
 	ui.textView = textView
 	ui.textArea = textArea
 	ui.button = button
-
+	ui.db = db
 	button.SetSelectedFunc(ui.buttonHandler)
 
 	textArea.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
@@ -207,8 +211,9 @@ func (ui *TUI) buttonHandler() {
 	if msg == "" {
 		return
 	}
+	id := common.HexToAddress(to)
 
-	if err := ui.app.SendMessageHandler(common.HexToAddress(to), msg); err != nil {
+	if err := ui.app.SendMessageHandler(id, msg); err != nil {
 		ui.WriteText("system", fmt.Sprintf("Error sending message: %s", err))
 		return
 	}

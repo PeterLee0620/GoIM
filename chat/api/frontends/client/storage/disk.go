@@ -24,13 +24,19 @@ var (
 	dbFile    string
 )
 
-type dataFileUser struct {
+type myAccount struct {
 	ID   common.Address `json:"id"`
 	Name string         `json:"name"`
 }
+type dataFileUser struct {
+	ID           common.Address `json:"id"`
+	Name         string         `json:"name"`
+	AppLastNonce uint64         `json:"app_last_nonce"`
+	LastNonce    uint64         `json:"last_nonce"`
+}
 
 type dataFile struct {
-	MyAccount dataFileUser   `json:"my_account"`
+	MyAccount myAccount      `json:"my_account"`
 	Contacts  []dataFileUser `json:"contacts"`
 }
 
@@ -71,7 +77,7 @@ func createDBOnDisk(myAccountID common.Address) (dataFile, error) {
 	defer f.Close()
 
 	df := dataFile{
-		MyAccount: dataFileUser{
+		MyAccount: myAccount{
 			ID:   myAccountID,
 			Name: "Anonymous",
 		},

@@ -34,7 +34,7 @@ func run() error {
 
 	// -------------------------------------------------------------------------
 
-	ui := tui.New(myAccountID, db.Contacts())
+	ui := tui.New(myAccountID, db)
 
 	// -------------------------------------------------------------------------
 
@@ -45,7 +45,7 @@ func run() error {
 
 	// -------------------------------------------------------------------------
 
-	if err := app.Handshake(db.MyAccount().Name); err != nil {
+	if err := app.Handshake(db.MyAccount()); err != nil {
 		return fmt.Errorf("handshake: %w", err)
 	}
 

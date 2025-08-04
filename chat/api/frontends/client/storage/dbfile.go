@@ -9,7 +9,7 @@ import (
 )
 
 type DB struct {
-	myAccount app.User
+	myAccount app.MyAccount
 	contacts  map[common.Address]app.User
 	mu        sync.RWMutex
 }
@@ -29,7 +29,7 @@ func NewDB(filePath string, myAccountID common.Address) (*DB, error) {
 	}
 
 	db := DB{
-		myAccount: app.User{
+		myAccount: app.MyAccount{
 			ID:   df.MyAccount.ID,
 			Name: df.MyAccount.Name,
 		},
@@ -39,7 +39,7 @@ func NewDB(filePath string, myAccountID common.Address) (*DB, error) {
 	return &db, nil
 }
 
-func (c *DB) MyAccount() app.User {
+func (c *DB) MyAccount() app.MyAccount {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -135,6 +135,78 @@ func (db *DB) InsertMessage(id common.Address, msg string) error {
 	if err := flushMsgToDisk(id, msg); err != nil {
 		return fmt.Errorf("write message: %w", err)
 	}
+
+	return nil
+}
+
+func (db *DB) UpdateAppNonce(id common.Address, nonce uint64) error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	// -------------------------------------------------------------------------
+	// Update in the in-memory cache of contacts.
+
+	u, exists := db.contacts[id]
+	if !exists {
+		return fmt.Errorf("contact not found")
+	}
+
+	u.AppLastNonce = nonce
+
+	db.contacts[id] = u
+
+	// -------------------------------------------------------------------------
+	// Update the local file.
+
+	df, err := readDBFromDisk()
+	if err != nil {
+		return fmt.Errorf("config read: %w", err)
+	}
+
+	for i, contact := range df.Contacts {
+		if contact.ID == id {
+			df.Contacts[i].AppLastNonce = nonce
+			break
+		}
+	}
+
+	flushDBToDisk(df)
+
+	return nil
+}
+
+func (db *DB) UpdateContactNonce(id common.Address, nonce uint64) error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	// -------------------------------------------------------------------------
+	// Update in the in-memory cache of contacts.
+
+	u, exists := db.contacts[id]
+	if !exists {
+		return fmt.Errorf("contact not found")
+	}
+
+	u.LastNonce = nonce
+
+	db.contacts[id] = u
+
+	// -------------------------------------------------------------------------
+	// Update the local file.
+
+	df, err := readDBFromDisk()
+	if err != nil {
+		return fmt.Errorf("config read: %w", err)
+	}
+
+	for i, contact := range df.Contacts {
+		if contact.ID == id {
+			df.Contacts[i].LastNonce = nonce
+			break
+		}
+	}
+
+	flushDBToDisk(df)
 
 	return nil
 }

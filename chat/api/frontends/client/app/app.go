@@ -12,16 +12,24 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+type MyAccount struct {
+	ID   common.Address
+	Name string
+}
+
 type User struct {
-	ID       common.Address
-	Name     string
-	Messages []string
+	ID           common.Address
+	Name         string
+	AppLastNonce uint64
+	LastNonce    uint64
+	Messages     []string
 }
 
 type Storage interface {
 	QueryContactByID(id common.Address) (User, error)
 	InsertContact(id common.Address, name string) (User, error)
 	InsertMessage(id common.Address, msg string) error
+	UpdateAppNonce(id common.Address, nonce uint64) error
 }
 
 type UI interface {
@@ -33,17 +41,18 @@ type UI interface {
 // =============================================================================
 
 type outgoingMessage struct {
-	ToID  common.Address `json:"toID"`
-	Msg   string         `json:"msg"`
-	Nonce uint64         `json:"nonce"`
-	V     *big.Int       `json:"v"`
-	R     *big.Int       `json:"r"`
-	S     *big.Int       `json:"s"`
+	ToID      common.Address `json:"toID"`
+	Msg       string         `json:"msg"`
+	FromNonce uint64         `json:"fromNonce"`
+	V         *big.Int       `json:"v"`
+	R         *big.Int       `json:"r"`
+	S         *big.Int       `json:"s"`
 }
 
 type usr struct {
-	ID   common.Address `json:"id"`
-	Name string         `json:"name"`
+	ID    common.Address `json:"id"`
+	Name  string         `json:"name"`
+	Nonce uint64         `json:"nonce"`
 }
 
 type incomingMessage struct {
@@ -84,7 +93,7 @@ func (app *App) Run() error {
 	return app.ui.Run()
 }
 
-func (app *App) Handshake(name string) error {
+func (app *App) Handshake(acct MyAccount) error {
 	conn, _, err := websocket.DefaultDialer.Dial(app.url, nil)
 	if err != nil {
 		return fmt.Errorf("dial: %w", err)
@@ -99,7 +108,7 @@ func (app *App) Handshake(name string) error {
 		return fmt.Errorf("read: %w", err)
 	}
 
-	if string(msg) != "Hello" {
+	if string(msg) != "HELLO" {
 		return fmt.Errorf("unexpected message: %s", msg)
 	}
 
@@ -110,7 +119,7 @@ func (app *App) Handshake(name string) error {
 		Name string
 	}{
 		ID:   app.myAccountID,
-		Name: name,
+		Name: acct.Name,
 	}
 
 	data, err := json.Marshal(user)
@@ -124,51 +133,14 @@ func (app *App) Handshake(name string) error {
 
 	// -------------------------------------------------------------------------
 
-	_, msg, err = conn.ReadMessage()
-	if err != nil {
+	if _, _, err = conn.ReadMessage(); err != nil {
 		return fmt.Errorf("read: %w", err)
 	}
 
 	// -------------------------------------------------------------------------
 
 	go func() {
-		for {
-			_, msg, err = conn.ReadMessage()
-			if err != nil {
-				app.ui.WriteText("system", fmt.Sprintf("read: %s", err))
-				return
-			}
-
-			var inMsg incomingMessage
-			if err := json.Unmarshal(msg, &inMsg); err != nil {
-				app.ui.WriteText("system", fmt.Sprintf("unmarshal: %s", err))
-				return
-			}
-
-			user, err := app.db.QueryContactByID(inMsg.From.ID)
-			switch {
-			case err != nil:
-				user, err = app.db.InsertContact(inMsg.From.ID, inMsg.From.Name)
-				if err != nil {
-					app.ui.WriteText("system", fmt.Sprintf("add contact: %s", err))
-					return
-				}
-
-				app.ui.UpdateContact(inMsg.From.ID.Hex(), inMsg.From.Name)
-
-			default:
-				inMsg.From.Name = user.Name
-			}
-
-			msg := formatMessage(user.Name, inMsg.Msg)
-
-			if err := app.db.InsertMessage(inMsg.From.ID, msg); err != nil {
-				app.ui.WriteText("system", fmt.Sprintf("add message: %s", err))
-				return
-			}
-
-			app.ui.WriteText(inMsg.From.ID.Hex(), msg)
-		}
+		app.ReceiveCapMessage(conn)
 	}()
 
 	return nil
@@ -176,19 +148,83 @@ func (app *App) Handshake(name string) error {
 
 // =============================================================================
 
+func (app *App) ReceiveCapMessage(conn *websocket.Conn) {
+	for {
+		_, msg, err := conn.ReadMessage()
+		if err != nil {
+			app.ui.WriteText("system", fmt.Sprintf("read: %s", err))
+			return
+		}
+
+		var inMsg incomingMessage
+		if err := json.Unmarshal(msg, &inMsg); err != nil {
+			app.ui.WriteText("system", fmt.Sprintf("unmarshal: %s", err))
+			return
+		}
+
+		user, err := app.db.QueryContactByID(inMsg.From.ID)
+		switch {
+		case err != nil:
+			user, err = app.db.InsertContact(inMsg.From.ID, inMsg.From.Name)
+			if err != nil {
+				app.ui.WriteText("system", fmt.Sprintf("add contact: %s", err))
+				return
+			}
+
+			app.ui.UpdateContact(inMsg.From.ID.Hex(), inMsg.From.Name)
+
+		default:
+			inMsg.From.Name = user.Name
+		}
+
+		// -----------------------------------------------------------------
+
+		expNonce := user.LastNonce + 1
+		if inMsg.From.Nonce != expNonce {
+			app.ui.WriteText("system", fmt.Sprintf("invalid nonce: %d != %d", inMsg.From.Nonce, expNonce))
+			return
+		}
+
+		if err := app.db.UpdateAppNonce(inMsg.From.ID, expNonce); err != nil {
+			app.ui.WriteText("system", fmt.Sprintf("update app nonce: %s", err))
+			return
+		}
+
+		// -----------------------------------------------------------------
+
+		fm := formatMessage(user.Name, inMsg.Msg)
+
+		if err := app.db.InsertMessage(inMsg.From.ID, fm); err != nil {
+			app.ui.WriteText("system", fmt.Sprintf("add message: %s", err))
+			return
+		}
+
+		app.ui.WriteText(inMsg.From.ID.Hex(), fm)
+	}
+}
+
 func (app *App) SendMessageHandler(to common.Address, msg string) error {
 	if app.conn == nil {
 		return fmt.Errorf("no connection")
 	}
 
+	usr, err := app.db.QueryContactByID(to)
+	if err != nil {
+		return fmt.Errorf("query contact: %w", err)
+	}
+
+	nonce := usr.AppLastNonce + 1
+
+	// -------------------------------------------------------------------------
+
 	dataToSign := struct {
-		ToID  common.Address
-		Msg   string
-		Nonce uint64
+		ToID      common.Address
+		Msg       string
+		FromNonce uint64
 	}{
-		ToID:  to,
-		Msg:   msg,
-		Nonce: 1,
+		ToID:      to,
+		Msg:       msg,
+		FromNonce: nonce,
 	}
 
 	v, r, s, err := signature.Sign(dataToSign, app.privateKey)
@@ -197,12 +233,12 @@ func (app *App) SendMessageHandler(to common.Address, msg string) error {
 	}
 
 	outMsg := outgoingMessage{
-		ToID:  to,
-		Msg:   msg,
-		Nonce: 1,
-		V:     v,
-		R:     r,
-		S:     s,
+		ToID:      to,
+		Msg:       msg,
+		FromNonce: nonce,
+		V:         v,
+		R:         r,
+		S:         s,
 	}
 
 	data, err := json.Marshal(outMsg)
@@ -214,17 +250,21 @@ func (app *App) SendMessageHandler(to common.Address, msg string) error {
 		return fmt.Errorf("write: %w", err)
 	}
 
+	// -------------------------------------------------------------------------
+
+	if err := app.db.UpdateAppNonce(to, nonce); err != nil {
+		return fmt.Errorf("update app nonce: %w", err)
+	}
+
 	msg = formatMessage("You", msg)
 
 	if err := app.db.InsertMessage(to, msg); err != nil {
 		return fmt.Errorf("add message: %w", err)
 	}
 
+	// -------------------------------------------------------------------------
+
 	app.ui.WriteText(to.Hex(), msg)
 
 	return nil
-}
-
-func (app *App) QueryContactHandler(id common.Address) (User, error) {
-	return app.db.QueryContactByID(id)
 }

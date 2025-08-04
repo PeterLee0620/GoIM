@@ -10,12 +10,14 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
+// Users provides user storage management.
 type Users struct {
 	log     *logger.Logger
 	users   map[common.Address]chat.User
 	muUsers sync.RWMutex
 }
 
+// New creates a new user storage.
 func New(log *logger.Logger) *Users {
 	u := Users{
 		log:   log,
@@ -25,79 +27,101 @@ func New(log *logger.Logger) *Users {
 	return &u
 }
 
-func (u *Users) AddUser(ctx context.Context, usr chat.User) error {
+// Add adds a new user to the storage.
+func (u *Users) Add(ctx context.Context, usr chat.User) error {
 	u.muUsers.Lock()
 	defer u.muUsers.Unlock()
+
 	if _, exists := u.users[usr.ID]; exists {
 		return chat.ErrExists
 	}
-	u.log.Info(ctx, "chat-adduser", "name", usr.Name, "id", usr.ID)
 
 	u.users[usr.ID] = usr
 
+	u.log.Debug(ctx, "chat-adduser", "name", usr.Name, "id", usr.ID)
+
 	return nil
 }
-func (u *Users) UpdateLastPing(ctx context.Context, usrID common.Address) error {
+
+// UpdateLastPing updates a user value's ping date/time.
+func (u *Users) UpdateLastPing(ctx context.Context, userID common.Address) error {
 	u.muUsers.Lock()
 	defer u.muUsers.Unlock()
-	usr, exists := u.users[usrID]
+
+	usr, exists := u.users[userID]
 	if !exists {
 		return chat.ErrNotExists
-
 	}
+
 	usr.LastPing = time.Now()
 	u.users[usr.ID] = usr
 
+	u.log.Debug(ctx, "chat-updping", "name", usr.Name, "id", usr.ID, "lastPing", usr.LastPing)
+
 	return nil
 }
-func (u *Users) UpdateLastPong(ctx context.Context, usrID common.Address) (chat.User, error) {
+
+// UpdateLastPong updates a user value's pong date/time.
+func (u *Users) UpdateLastPong(ctx context.Context, userID common.Address) (chat.User, error) {
 	u.muUsers.Lock()
 	defer u.muUsers.Unlock()
-	usr, exists := u.users[usrID]
+
+	usr, exists := u.users[userID]
 	if !exists {
 		return chat.User{}, chat.ErrNotExists
-
 	}
+
 	usr.LastPong = time.Now()
 	u.users[usr.ID] = usr
 
+	u.log.Debug(ctx, "chat-updpong", "name", usr.Name, "id", usr.ID, "lastPong", usr.LastPong)
+
 	return usr, nil
 }
-func (u *Users) RemoveUser(ctx context.Context, userID common.Address) {
+
+// Remove removes a user from the storage.
+func (u *Users) Remove(ctx context.Context, userID common.Address) {
 	u.muUsers.Lock()
 	defer u.muUsers.Unlock()
+
 	usr, exists := u.users[userID]
 	if !exists {
-		u.log.Info(ctx, "chat-removeuser", "userID", userID, "doesn't exisrs")
+		u.log.Debug(ctx, "chat-removeuser", "userID", userID, "status", "does not exists")
 		return
 	}
-	delete(u.users, userID)
-	u.log.Info(ctx, "chat-removeuser", "name", usr.Name, "id", usr.ID)
 
+	delete(u.users, userID)
+
+	u.log.Debug(ctx, "chat-removeuser", "name", usr.Name, "id", usr.ID)
 }
 
+// Connections returns all the know users with their connections. A connection
+// that is not valid shouldn't be used.
 func (u *Users) Connections() map[common.Address]chat.Connection {
-
 	u.muUsers.RLock()
 	defer u.muUsers.RUnlock()
+
 	m := make(map[common.Address]chat.Connection)
 	for id, usr := range u.users {
 		m[id] = chat.Connection{
 			Conn:     usr.Conn,
-			LastPong: usr.LastPong,
 			LastPing: usr.LastPing,
+			LastPong: usr.LastPong,
 		}
-
 	}
+
 	return m
 }
 
+// Retrieve retrieves a user from the storage.
 func (u *Users) Retrieve(ctx context.Context, userID common.Address) (chat.User, error) {
 	u.muUsers.RLock()
 	defer u.muUsers.RUnlock()
+
 	usr, exists := u.users[userID]
 	if !exists {
 		return chat.User{}, chat.ErrNotExists
 	}
+
 	return usr, nil
 }
