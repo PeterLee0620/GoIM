@@ -230,7 +230,7 @@ func (app *App) SendMessageHandler(to common.Address, msg string) error {
 
 	nonce := usr.AppLastNonce + 1
 
-	msg, err = app.preprocessSendMessage(msg, usr)
+	msg, err = app.preprocessSendMessage(msg)
 	if err != nil {
 		return fmt.Errorf("preprocess message: %w", err)
 	}
@@ -302,13 +302,13 @@ func (app *App) preprocessRecvMessage(inMsg incomingMessage) (incomingMessage, e
 	msg = strings.ToLower(msg)
 
 	parts := strings.Split(msg[1:], " ")
-	if len(parts) != 2 {
+	if len(parts) < 2 {
 		return incomingMessage{}, fmt.Errorf("invalid command format")
 	}
 
 	switch parts[0] {
 	case "key":
-		if err := app.db.UpdateContactKey(inMsg.From.ID, parts[1]); err != nil {
+		if err := app.db.UpdateContactKey(inMsg.From.ID, msg[5:]); err != nil {
 			return incomingMessage{}, fmt.Errorf("updating key: %w", err)
 		}
 		inMsg.Msg = "** updated contact's key **"
@@ -318,7 +318,7 @@ func (app *App) preprocessRecvMessage(inMsg incomingMessage) (incomingMessage, e
 	return incomingMessage{}, fmt.Errorf("unknown command")
 }
 
-func (app *App) preprocessSendMessage(msg string, usr User) (string, error) {
+func (app *App) preprocessSendMessage(msg string) (string, error) {
 	if msg[0] != '/' {
 		return msg, nil
 	}
@@ -335,7 +335,7 @@ func (app *App) preprocessSendMessage(msg string, usr User) (string, error) {
 	case "share":
 		switch parts[1] {
 		case "key":
-			if usr.Key == "" {
+			if app.id.PubKeyRSA == "" {
 				return "", fmt.Errorf("no key to share")
 			}
 
