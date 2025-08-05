@@ -2,10 +2,10 @@
 package app
 
 import (
-	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"strings"
 
 	"github.com/DavidLee0620/GoIM/chat/foundation/signature"
 	"github.com/ethereum/go-ethereum/common"
@@ -22,6 +22,7 @@ type User struct {
 	Name         string
 	AppLastNonce uint64
 	LastNonce    uint64
+	Key          string
 	Messages     []string
 }
 
@@ -31,6 +32,7 @@ type Storage interface {
 	InsertMessage(id common.Address, msg string) error
 	UpdateAppNonce(id common.Address, nonce uint64) error
 	UpdateContactNonce(id common.Address, nonce uint64) error
+	UpdateContactKey(id common.Address, key string) error
 }
 
 type UI interface {
@@ -64,21 +66,19 @@ type incomingMessage struct {
 // =============================================================================
 
 type App struct {
-	db          Storage
-	ui          UI
-	myAccountID common.Address
-	privateKey  *ecdsa.PrivateKey
-	url         string
-	conn        *websocket.Conn
+	db   Storage
+	ui   UI
+	id   ID
+	url  string
+	conn *websocket.Conn
 }
 
-func NewApp(db Storage, ui UI, myAccountID common.Address, privateKey *ecdsa.PrivateKey, url string) *App {
+func NewApp(db Storage, ui UI, id ID, url string) *App {
 	return &App{
-		db:          db,
-		ui:          ui,
-		myAccountID: myAccountID,
-		privateKey:  privateKey,
-		url:         url,
+		db:  db,
+		ui:  ui,
+		id:  id,
+		url: url,
 	}
 }
 
@@ -119,7 +119,7 @@ func (app *App) Handshake(acct MyAccount) error {
 		ID   common.Address
 		Name string
 	}{
-		ID:   app.myAccountID,
+		ID:   app.id.MyAccountID,
 		Name: acct.Name,
 	}
 
@@ -151,14 +151,14 @@ func (app *App) Handshake(acct MyAccount) error {
 
 func (app *App) ReceiveCapMessage(conn *websocket.Conn) {
 	for {
-		_, msg, err := conn.ReadMessage()
+		_, rawMsg, err := conn.ReadMessage()
 		if err != nil {
 			app.ui.WriteText("system", fmt.Sprintf("read: %s", err))
 			return
 		}
 
 		var inMsg incomingMessage
-		if err := json.Unmarshal(msg, &inMsg); err != nil {
+		if err := json.Unmarshal(rawMsg, &inMsg); err != nil {
 			app.ui.WriteText("system", fmt.Sprintf("unmarshal: %s", err))
 			return
 		}
@@ -182,7 +182,7 @@ func (app *App) ReceiveCapMessage(conn *websocket.Conn) {
 
 		expNonce := user.LastNonce + 1
 		if inMsg.From.Nonce != expNonce {
-			app.ui.WriteText("system", fmt.Sprintf("invalid nonce: %d != %d", inMsg.From.Nonce, expNonce))
+			app.ui.WriteText("system", fmt.Sprintf("invalid nonce: possible security issue with contact: got: %d, exp: %d", inMsg.From.Nonce, expNonce))
 			return
 		}
 
@@ -191,7 +191,15 @@ func (app *App) ReceiveCapMessage(conn *websocket.Conn) {
 			return
 		}
 
-		// -----------------------------------------------------------------
+		// ---------------------------------------------------------------------
+
+		inMsg, err = app.preprocessRecvMessage(inMsg)
+		if err != nil {
+			app.ui.WriteText("system", fmt.Sprintf("preprocessed: %s: %s", inMsg.Msg, err))
+			return
+		}
+
+		// ---------------------------------------------------------------------
 
 		fm := formatMessage(user.Name, inMsg.Msg)
 
@@ -209,12 +217,23 @@ func (app *App) SendMessageHandler(to common.Address, msg string) error {
 		return fmt.Errorf("no connection")
 	}
 
+	if len(msg) == 0 {
+		return fmt.Errorf("message cannot be empty")
+	}
+
 	usr, err := app.db.QueryContactByID(to)
 	if err != nil {
 		return fmt.Errorf("query contact: %w", err)
 	}
 
+	// -------------------------------------------------------------------------
+
 	nonce := usr.AppLastNonce + 1
+
+	msg, err = app.preprocessSendMessage(msg, usr)
+	if err != nil {
+		return fmt.Errorf("preprocess message: %w", err)
+	}
 
 	// -------------------------------------------------------------------------
 
@@ -228,7 +247,7 @@ func (app *App) SendMessageHandler(to common.Address, msg string) error {
 		FromNonce: nonce,
 	}
 
-	v, r, s, err := signature.Sign(dataToSign, app.privateKey)
+	v, r, s, err := signature.Sign(dataToSign, app.id.PrivKeyECDSA)
 	if err != nil {
 		return fmt.Errorf("signing: %w", err)
 	}
@@ -268,4 +287,61 @@ func (app *App) SendMessageHandler(to common.Address, msg string) error {
 	app.ui.WriteText(to.Hex(), msg)
 
 	return nil
+}
+
+// =============================================================================
+
+func (app *App) preprocessRecvMessage(inMsg incomingMessage) (incomingMessage, error) {
+	msg := inMsg.Msg
+
+	if msg[0] != '/' {
+		return inMsg, nil
+	}
+
+	msg = strings.TrimSpace(msg)
+	msg = strings.ToLower(msg)
+
+	parts := strings.Split(msg[1:], " ")
+	if len(parts) != 2 {
+		return incomingMessage{}, fmt.Errorf("invalid command format")
+	}
+
+	switch parts[0] {
+	case "key":
+		if err := app.db.UpdateContactKey(inMsg.From.ID, parts[1]); err != nil {
+			return incomingMessage{}, fmt.Errorf("updating key: %w", err)
+		}
+		inMsg.Msg = "** updated contact's key **"
+		return inMsg, nil
+	}
+
+	return incomingMessage{}, fmt.Errorf("unknown command")
+}
+
+func (app *App) preprocessSendMessage(msg string, usr User) (string, error) {
+	if msg[0] != '/' {
+		return msg, nil
+	}
+
+	msg = strings.TrimSpace(msg)
+	msg = strings.ToLower(msg)
+
+	parts := strings.Split(msg[1:], " ")
+	if len(parts) != 2 {
+		return "", fmt.Errorf("invalid command format")
+	}
+
+	switch parts[0] {
+	case "share":
+		switch parts[1] {
+		case "key":
+			if usr.Key == "" {
+				return "", fmt.Errorf("no key to share")
+			}
+
+			return fmt.Sprintf("/key %s", app.id.PubKeyRSA), nil
+		}
+	}
+
+	return "", fmt.Errorf("unknown command")
 }

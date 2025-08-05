@@ -21,12 +21,13 @@ func NewDB(filePath string, myAccountID common.Address) (*DB, error) {
 	}
 
 	contacts := make(map[common.Address]app.User, len(df.Contacts))
-	for _, user := range df.Contacts {
-		contacts[user.ID] = app.User{
-			ID:           user.ID,
-			Name:         user.Name,
-			AppLastNonce: user.AppLastNonce,
-			LastNonce:    user.LastNonce,
+	for _, usr := range df.Contacts {
+		contacts[usr.ID] = app.User{
+			ID:           usr.ID,
+			Name:         usr.Name,
+			AppLastNonce: usr.AppLastNonce,
+			LastNonce:    usr.LastNonce,
+			Key:          usr.Key,
 		}
 	}
 
@@ -87,7 +88,7 @@ func (db *DB) InsertContact(id common.Address, name string) (app.User, error) {
 	defer db.mu.Unlock()
 
 	// -------------------------------------------------------------------------
-	// Update in the in-memory contacts of contacts.
+	// Update in the in-memory cache of contacts.
 
 	db.contacts[id] = app.User{
 		ID:   id,
@@ -95,7 +96,7 @@ func (db *DB) InsertContact(id common.Address, name string) (app.User, error) {
 	}
 
 	// -------------------------------------------------------------------------
-	// Update the data.json file.
+	// Update the local file.
 
 	df, err := readDBFromDisk()
 	if err != nil {
@@ -204,6 +205,42 @@ func (db *DB) UpdateContactNonce(id common.Address, nonce uint64) error {
 	for i, contact := range df.Contacts {
 		if contact.ID == id {
 			df.Contacts[i].LastNonce = nonce
+			break
+		}
+	}
+
+	flushDBToDisk(df)
+
+	return nil
+}
+
+func (db *DB) UpdateContactKey(id common.Address, key string) error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	// -------------------------------------------------------------------------
+	// Update in the in-memory cache of contacts.
+
+	u, exists := db.contacts[id]
+	if !exists {
+		return fmt.Errorf("contact not found")
+	}
+
+	u.Key = key
+
+	db.contacts[id] = u
+
+	// -------------------------------------------------------------------------
+	// Update the local file.
+
+	df, err := readDBFromDisk()
+	if err != nil {
+		return fmt.Errorf("config read: %w", err)
+	}
+
+	for i, contact := range df.Contacts {
+		if contact.ID == id {
+			df.Contacts[i].Key = key
 			break
 		}
 	}

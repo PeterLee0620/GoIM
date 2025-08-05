@@ -5,7 +5,7 @@ SHELL = $(if $(wildcard $(SHELL_PATH)),/bin/ash,/bin/bash)
 #============================================================================
 # Chat
 hack:
-	go run chat/api/tooling/hack/sign/main.go
+	go run chat/api/tooling/hack/rsa/main.go
 run-cap:
 	go run chat/api/services/cap/main.go | go run chat/api/tooling/logfmt/main.go
 run-client:

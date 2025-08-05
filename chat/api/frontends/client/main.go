@@ -22,23 +22,23 @@ func main() {
 }
 
 func run() error {
-	myAccountID, privateKey, err := app.NewID(configFilePath)
+	id, err := app.NewID(configFilePath)
 	if err != nil {
 		return fmt.Errorf("id: %w", err)
 	}
 
-	db, err := dbfile.NewDB(configFilePath, myAccountID)
+	db, err := dbfile.NewDB(configFilePath, id.MyAccountID)
 	if err != nil {
 		return fmt.Errorf("config: %w", err)
 	}
 
 	// -------------------------------------------------------------------------
 
-	ui := tui.New(myAccountID, db)
+	ui := tui.New(id.MyAccountID, db)
 
 	// -------------------------------------------------------------------------
 
-	app := app.NewApp(db, ui, myAccountID, privateKey, url)
+	app := app.NewApp(db, ui, id, url)
 	defer app.Close()
 
 	ui.SetApp(app)
