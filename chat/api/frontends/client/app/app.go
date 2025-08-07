@@ -22,19 +22,25 @@ type MyAccount struct {
 	Name string
 }
 
+type Message struct {
+	Name    string
+	Content []byte
+}
+
 type User struct {
 	ID           common.Address
 	Name         string
 	AppLastNonce uint64
 	LastNonce    uint64
 	Key          string
-	Messages     [][]byte
+	Messages     []Message
 }
 
 type Storage interface {
+	Contacts() []User
 	QueryContactByID(id common.Address) (User, error)
 	InsertContact(id common.Address, name string) (User, error)
-	InsertMessage(id common.Address, msg []byte) error
+	InsertMessage(id common.Address, msg Message) error
 	UpdateAppNonce(id common.Address, nonce uint64) error
 	UpdateContactNonce(id common.Address, nonce uint64) error
 	UpdateContactKey(id common.Address, key string) error
@@ -42,7 +48,7 @@ type Storage interface {
 
 type UI interface {
 	Run() error
-	WriteText(id string, msg []byte)
+	WriteText(id string, msg Message)
 	UpdateContact(id string, name string)
 }
 
@@ -160,13 +166,13 @@ func (app *App) ReceiveCapMessage(conn *websocket.Conn) {
 	for {
 		_, rawMsg, err := conn.ReadMessage()
 		if err != nil {
-			app.ui.WriteText("system", fmt.Appendf(nil, "read: %s", err))
+			app.ui.WriteText("system", errorMessage("read: %s", err))
 			return
 		}
 
 		var inMsg incomingMessage
 		if err := json.Unmarshal(rawMsg, &inMsg); err != nil {
-			app.ui.WriteText("system", fmt.Appendf(nil, "unmarshal: %s", err))
+			app.ui.WriteText("system", errorMessage("unmarshal: %s", err))
 			return
 		}
 
@@ -175,7 +181,7 @@ func (app *App) ReceiveCapMessage(conn *websocket.Conn) {
 		case err != nil:
 			user, err = app.db.InsertContact(inMsg.From.ID, inMsg.From.Name)
 			if err != nil {
-				app.ui.WriteText("system", fmt.Appendf(nil, "add contact: %s", err))
+				app.ui.WriteText("system", errorMessage("add contact: %s", err))
 				return
 			}
 
@@ -189,35 +195,37 @@ func (app *App) ReceiveCapMessage(conn *websocket.Conn) {
 
 		expNonce := user.LastNonce + 1
 		if inMsg.From.Nonce != expNonce {
-			app.ui.WriteText("system", fmt.Appendf(nil, "invalid nonce: possible security issue with contact: got: %d, exp: %d", inMsg.From.Nonce, expNonce))
+			app.ui.WriteText("system", errorMessage("invalid nonce: possible security issue with contact: got: %d, exp: %d", inMsg.From.Nonce, expNonce))
 			return
 		}
 
 		if err := app.db.UpdateContactNonce(inMsg.From.ID, expNonce); err != nil {
-			app.ui.WriteText("system", fmt.Appendf(nil, "update app nonce: %s", err))
+			app.ui.WriteText("system", errorMessage("update app nonce: %s", err))
 			return
 		}
 
 		// ---------------------------------------------------------------------
 
-		decryptedMsg, encryptedMsg, err := app.preprocessRecvMessage(inMsg)
+		msg, err := app.preprocessRecvMessage(inMsg)
 		if err != nil {
-			app.ui.WriteText("system", fmt.Appendf(nil, "preprocess message: %s", err))
+			app.ui.WriteText("system", errorMessage("preprocess message: %s", err))
 			return
 		}
 
 		// ---------------------------------------------------------------------
 
-		if decryptedMsg[0] != '/' {
-			decMsg := formatMessage("You", decryptedMsg)
-			encMsg := formatMessage("You", encryptedMsg)
+		if inMsg.Msg[0] != '/' {
+			msg := Message{
+				Name:    inMsg.From.Name,
+				Content: msg,
+			}
 
-			if err := app.db.InsertMessage(inMsg.From.ID, encMsg); err != nil {
-				app.ui.WriteText("system", fmt.Appendf(nil, "add message: %s", err))
+			if err := app.db.InsertMessage(inMsg.From.ID, msg); err != nil {
+				app.ui.WriteText("system", errorMessage("add message: %s", err))
 				return
 			}
 
-			app.ui.WriteText(inMsg.From.ID.Hex(), decMsg)
+			app.ui.WriteText(inMsg.From.ID.Hex(), msg)
 		}
 	}
 }
@@ -240,17 +248,9 @@ func (app *App) SendMessageHandler(to common.Address, msg []byte) error {
 
 	nonce := usr.AppLastNonce + 1
 
-	decryptedMsg, encryptedMsg, err := app.preprocessSendMessage(usr, msg)
+	onWire, onScreen, err := app.preprocessSendMessage(usr, msg)
 	if err != nil {
 		return fmt.Errorf("preprocess message: %w", err)
-	}
-
-	msg = decryptedMsg
-
-	var encrypted bool
-	if encryptedMsg != nil {
-		encrypted = true
-		msg = encryptedMsg
 	}
 
 	// -------------------------------------------------------------------------
@@ -261,7 +261,7 @@ func (app *App) SendMessageHandler(to common.Address, msg []byte) error {
 		FromNonce uint64
 	}{
 		ToID:      to,
-		Msg:       msg,
+		Msg:       onWire,
 		FromNonce: nonce,
 	}
 
@@ -270,10 +270,15 @@ func (app *App) SendMessageHandler(to common.Address, msg []byte) error {
 		return fmt.Errorf("signing: %w", err)
 	}
 
+	var encrypted bool
+	if usr.Key != "" {
+		encrypted = true
+	}
+
 	outMsg := outgoingMessage{
 		ToID:      to,
 		Encrypted: encrypted,
-		Msg:       msg,
+		Msg:       onWire,
 		FromNonce: nonce,
 		V:         v,
 		R:         r,
@@ -297,23 +302,33 @@ func (app *App) SendMessageHandler(to common.Address, msg []byte) error {
 
 	// -------------------------------------------------------------------------
 
-	if decryptedMsg[0] != '/' {
-		decMsg := formatMessage("You", decryptedMsg)
-		encMsg := formatMessage("You", encryptedMsg)
+	if msg[0] != '/' {
+		msg := Message{
+			Name:    "You",
+			Content: onScreen,
+		}
 
-		if err := app.db.InsertMessage(to, encMsg); err != nil {
+		if err := app.db.InsertMessage(to, msg); err != nil {
 			return fmt.Errorf("add message: %w", err)
 		}
 
-		app.ui.WriteText(to.Hex(), decMsg)
+		app.ui.WriteText(to.Hex(), msg)
 	}
 
 	return nil
 }
 
+func (app *App) Contacts() []User {
+	return app.db.Contacts()
+}
+
+func (app *App) QueryContactByID(id common.Address) (User, error) {
+	return app.db.QueryContactByID(id)
+}
+
 // =============================================================================
 
-func (app *App) preprocessRecvMessage(inMsg incomingMessage) ([]byte, []byte, error) {
+func (app *App) preprocessRecvMessage(inMsg incomingMessage) ([]byte, error) {
 	msg := inMsg.Msg
 
 	// -------------------------------------------------------------------------
@@ -321,15 +336,15 @@ func (app *App) preprocessRecvMessage(inMsg incomingMessage) ([]byte, []byte, er
 
 	if msg[0] != '/' {
 		if !inMsg.Encrypted {
-			return msg, nil, nil
+			return msg, nil
 		}
 
 		decryptedData, err := rsa.DecryptPKCS1v15(rand.Reader, app.id.PrivKeyRSA, []byte(msg))
 		if err != nil {
-			return nil, nil, fmt.Errorf("encrypting message: %w", err)
+			return nil, fmt.Errorf("decrypting message: %w", err)
 		}
 
-		return decryptedData, inMsg.Msg, nil
+		return decryptedData, nil
 	}
 
 	// -------------------------------------------------------------------------
@@ -339,28 +354,28 @@ func (app *App) preprocessRecvMessage(inMsg incomingMessage) ([]byte, []byte, er
 
 	parts := strings.Split(msgStr[1:], " ")
 	if len(parts) < 2 {
-		return nil, nil, fmt.Errorf("invalid command format: parts: %d", len(parts))
+		return nil, fmt.Errorf("invalid command format: parts: %d", len(parts))
 	}
 
 	switch parts[0] {
 	case "key":
 		if err := app.db.UpdateContactKey(inMsg.From.ID, msgStr[5:]); err != nil {
-			return nil, nil, fmt.Errorf("updating key: %w", err)
+			return nil, fmt.Errorf("updating key: %w", err)
 		}
-		return []byte("** updated contact's key **"), nil, nil
+		return []byte("** updated contact's key **"), nil
 	}
 
-	return nil, nil, fmt.Errorf("unknown command")
+	return nil, fmt.Errorf("unknown command")
 }
 
-func (app *App) preprocessSendMessage(usr User, msg []byte) ([]byte, []byte, error) {
+func (app *App) preprocessSendMessage(usr User, msg []byte) (onWire []byte, onScreen []byte, err error) {
 
 	// -------------------------------------------------------------------------
 	// Process Normal Message
 
 	if msg[0] != '/' {
 		if usr.Key == "" {
-			return msg, nil, nil
+			return msg, msg, nil
 		}
 
 		publicKey, err := getPublicKey(usr.Key)
@@ -373,7 +388,7 @@ func (app *App) preprocessSendMessage(usr User, msg []byte) ([]byte, []byte, err
 			return nil, nil, fmt.Errorf("encrypting message: %w", err)
 		}
 
-		return msg, encryptedData, nil
+		return encryptedData, msg, nil
 	}
 
 	// -------------------------------------------------------------------------
@@ -396,7 +411,9 @@ func (app *App) preprocessSendMessage(usr User, msg []byte) ([]byte, []byte, err
 				return nil, nil, fmt.Errorf("no key to share")
 			}
 
-			return fmt.Appendf(nil, "/key %s", app.id.PubKeyRSA), nil, nil
+			errMsg := fmt.Appendf(nil, "/key %s", app.id.PubKeyRSA)
+
+			return errMsg, errMsg, nil
 		}
 	}
 

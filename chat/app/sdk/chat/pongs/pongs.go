@@ -35,7 +35,7 @@ func (p *Pongs) Add(ctx context.Context, usr chatbus.User) {
 	usr.Conn.SetPongHandler(h)
 }
 
-func (p *Pongs) Vaildata(usr chat.User, maxWait time.Duration) bool {
+func (p *Pongs) Vaildata(usr chatbus.User, maxWait time.Duration) bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	t := p.users[usr.ID]

@@ -15,7 +15,8 @@ import (
 
 	"github.com/DavidLee0620/GoIM/chat/app/sdk/mux"
 	"github.com/DavidLee0620/GoIM/chat/business/chatbus"
-	"github.com/DavidLee0620/GoIM/chat/business/chatbus/usermem"
+	"github.com/DavidLee0620/GoIM/chat/business/chatbus/storage/usermem"
+
 	"github.com/DavidLee0620/GoIM/chat/foundation/logger"
 	"github.com/DavidLee0620/GoIM/chat/foundation/web"
 	"github.com/ardanlabs/conf/v3"
