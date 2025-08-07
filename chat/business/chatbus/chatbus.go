@@ -1,5 +1,5 @@
 // Package chat provides supports for chat activity.
-package chat
+package chatbus
 
 import (
 	"context"

@@ -13,9 +13,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/DavidLee0620/GoIM/chat/app/sdk/chat"
-	"github.com/DavidLee0620/GoIM/chat/app/sdk/chat/users"
 	"github.com/DavidLee0620/GoIM/chat/app/sdk/mux"
+	"github.com/DavidLee0620/GoIM/chat/business/chatbus"
+	"github.com/DavidLee0620/GoIM/chat/business/chatbus/usermem"
 	"github.com/DavidLee0620/GoIM/chat/foundation/logger"
 	"github.com/DavidLee0620/GoIM/chat/foundation/web"
 	"github.com/ardanlabs/conf/v3"
@@ -136,7 +136,7 @@ func run(ctx context.Context, log *logger.Logger) error {
 		return fmt.Errorf("nats create: %w", err)
 	}
 	defer nc.Close()
-	chat, err := chat.New(log, nc, cfg.NATS.Subject, users.New(log), capID)
+	chat, err := chatbus.New(log, nc, cfg.NATS.Subject, usermem.New(log), capID)
 	if err != nil {
 		return fmt.Errorf("chat: %w", err)
 	}

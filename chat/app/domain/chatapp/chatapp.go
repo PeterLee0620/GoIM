@@ -5,18 +5,18 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/DavidLee0620/GoIM/chat/app/sdk/chat"
 	"github.com/DavidLee0620/GoIM/chat/app/sdk/errs"
+	"github.com/DavidLee0620/GoIM/chat/business/chatbus"
 	"github.com/DavidLee0620/GoIM/chat/foundation/logger"
 	"github.com/DavidLee0620/GoIM/chat/foundation/web"
 )
 
 type app struct {
 	log  *logger.Logger
-	chat *chat.Chat
+	chat *chatbus.Chat
 }
 
-func newApp(log *logger.Logger, chat *chat.Chat) *app {
+func newApp(log *logger.Logger, chat *chatbus.Chat) *app {
 	return &app{
 		log:  log,
 		chat: chat,

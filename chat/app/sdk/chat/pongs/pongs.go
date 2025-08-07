@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DavidLee0620/GoIM/chat/app/sdk/chat"
+	"github.com/DavidLee0620/GoIM/chat/business/chatbus"
 	"github.com/DavidLee0620/GoIM/chat/foundation/logger"
 	"github.com/ethereum/go-ethereum/common"
 )
@@ -24,7 +24,7 @@ func New(log *logger.Logger) *Pongs {
 	return &p
 }
 
-func (p *Pongs) Add(ctx context.Context, usr chat.User) {
+func (p *Pongs) Add(ctx context.Context, usr chatbus.User) {
 
 	h := func(appData string) error {
 		p.mu.Lock()
