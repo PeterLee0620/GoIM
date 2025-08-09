@@ -1,5 +1,9 @@
 # If you prefer the allow list template instead of the deny list, see community template:
-zarf/*
+zarf/cap/
+zarf/client/
+zarf/data/
+zarf/ollama/
+zarf/docker/openwebui
 
 # https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
 #
