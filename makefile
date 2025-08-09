@@ -18,11 +18,14 @@ docker:
 
 ollama-up:
 	export OLLAMA_MODELS="zarf/ollama/models" && \
-	export OLLAMA_DEBUG=1 && \
-	ollama serve
+    export OLLAMA_DEBUG=1 && \
+    export OLLAMA_HOST=0.0.0.0:11434 && \
+    export OLLAMA_ORIGINS="*" && \
+    ollama serve
 
 ollama-pull:
-	ollama pull llama3.3
+	ollama pull llama3.2
+
 
 ollama-logs:
 	tail -f -n 100 ~/.ollama/logs/server.log
@@ -31,13 +34,13 @@ ollama-logs:
 # OpenWebUI
 
 compose-up:
-	docker compose -f zarf/docker/compose.yaml up
+	docker-compose -f zarf/docker/compose.yaml up
 
 compose-down:
-	docker compose -f zarf/docker/compose.yaml down
+	docker-compose -f zarf/docker/compose.yaml down
 
 compose-logs:
-	docker compose logs -n 100
+	docker-compose logs -n 100
 
 openwebui:
 	open -a "Google Chrome" http://localhost:3000/
