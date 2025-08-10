@@ -55,7 +55,7 @@ run-cap:
 	go run api/services/cap/main.go | go run api/tooling/logfmt/main.go
 
 run-tui:
-	go run api/clients/tui/main.
+	go run api/clients/tui/main.go
 	
 run-tui-ai:
 	go run api/clients/tui/main.go --aimode=true
