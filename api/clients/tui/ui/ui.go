@@ -20,10 +20,13 @@ type TUI struct {
 	textArea *tview.TextArea
 	button   *tview.Button
 	app      *client.App
+	aiMode   bool
 }
 
-func New(myAccountID common.Address) *TUI {
-	var ui TUI
+func New(myAccountID common.Address, aiMode bool) *TUI {
+	ui := TUI{
+		aiMode: aiMode,
+	}
 
 	tApp := tview.NewApplication()
 
