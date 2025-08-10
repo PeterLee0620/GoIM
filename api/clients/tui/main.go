@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/PeterLee0620/GoIM/foundation/agent/ollamallm"
+
 	"github.com/PeterLee0620/GoIM/api/clients/tui/ui"
 	"github.com/PeterLee0620/GoIM/foundation/client"
 	"github.com/PeterLee0620/GoIM/foundation/client/storage/dbfile"
@@ -43,7 +45,16 @@ func run() error {
 
 	// -------------------------------------------------------------------------
 
-	ui := ui.New(id.MyAccountID, aiMode)
+	var agent *ollamallm.Agent
+
+	if aiMode {
+		agent, err = ollamallm.New()
+		if err != nil {
+			return fmt.Errorf("ollama: %w", err)
+		}
+	}
+
+	ui := ui.New(id.MyAccountID, agent)
 
 	// -------------------------------------------------------------------------
 
