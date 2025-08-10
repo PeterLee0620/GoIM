@@ -13,12 +13,14 @@ require (
 	github.com/nats-io/nats.go v1.43.0
 	github.com/rivo/tview v0.0.0-20250625164341-a4a78f1e05cb
 	github.com/starfederation/datastar v0.21.4
+	github.com/tmc/langchaingo v0.1.13
 )
 
 require (
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1 // indirect
 	github.com/delaneyj/gostar v0.8.0 // indirect
+	github.com/dlclark/regexp2 v1.11.4 // indirect
 	github.com/gdamore/encoding v1.0.1 // indirect
 	github.com/goccy/go-json v0.10.4 // indirect
 	github.com/holiman/uint256 v1.3.2 // indirect
@@ -31,6 +33,7 @@ require (
 	github.com/nats-io/nats-server/v2 v2.10.24 // indirect
 	github.com/nats-io/nkeys v0.4.11 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
+	github.com/pkoukk/tiktoken-go v0.1.6 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/samber/lo v1.47.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
