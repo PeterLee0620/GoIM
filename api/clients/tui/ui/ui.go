@@ -69,7 +69,7 @@ func New(myAccountID common.Address, agent *ollamallm.Agent) *TUI {
 		}
 
 		for i, msg := range user.Messages {
-			fmt.Fprintf(textView, "%s: %s\n", msg.Name, string(msg.Content))
+			fmt.Fprintf(textView, "%s: %s\n", msg.Name, client.StitchMessages(msg.Content))
 			if i < len(user.Messages)-1 {
 				fmt.Fprintln(textView, "-----")
 			}
@@ -125,12 +125,16 @@ func New(myAccountID common.Address, agent *ollamallm.Agent) *TUI {
 	ui.textArea = textArea
 	ui.button = button
 
-	button.SetSelectedFunc(ui.buttonHandler)
+	buttonHandler := func() {
+		ui.buttonHandler(common.Address{})
+	}
+
+	button.SetSelectedFunc(buttonHandler)
 
 	textArea.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyEnter:
-			ui.buttonHandler()
+			buttonHandler()
 			return nil
 		}
 		return event
@@ -155,14 +159,19 @@ func (ui *TUI) Run() error {
 func (ui *TUI) WriteText(msg client.Message) {
 	ui.textView.ScrollToEnd()
 
-	switch msg.ID {
+	switch msg.From {
 	case common.Address{}:
 		fmt.Fprintln(ui.textView, "-----")
-		fmt.Fprintf(ui.textView, "%s: %s\n", msg.Name, string(msg.Content))
+		fmt.Fprintf(ui.textView, "%s: %s\n", msg.Name, client.StitchMessages(msg.Content))
 
 	case ui.app.ID():
-		fmt.Fprintln(ui.textView, "-----")
-		fmt.Fprintf(ui.textView, "%s: %s\n", msg.Name, string(msg.Content))
+		idx := ui.list.GetCurrentItem()
+		_, currentID := ui.list.GetItemText(idx)
+
+		if msg.To.Hex() == currentID {
+			fmt.Fprintln(ui.textView, "-----")
+			fmt.Fprintf(ui.textView, "%s: %s\n", msg.Name, client.StitchMessages(msg.Content))
+		}
 
 	default:
 		idx := ui.list.GetCurrentItem()
@@ -170,20 +179,20 @@ func (ui *TUI) WriteText(msg client.Message) {
 		_, currentID := ui.list.GetItemText(idx)
 		if currentID == "" {
 			fmt.Fprintln(ui.textView, "-----")
-			fmt.Fprintln(ui.textView, "id not found: "+msg.ID.Hex())
+			fmt.Fprintln(ui.textView, "id not found: "+msg.From.Hex())
 			return
 		}
 
-		msgContent := fmt.Sprintf("%s: %s", msg.Name, string(msg.Content))
+		msgContent := fmt.Sprintf("%s: %s", msg.Name, client.StitchMessages(msg.Content))
 
-		ui.history.add(msg.ID, msgContent)
+		ui.history.add(msg.From, msgContent)
 
-		if msg.ID.Hex() == currentID {
+		if msg.From.Hex() == currentID {
 			fmt.Fprintln(ui.textView, "-----")
 			fmt.Fprintf(ui.textView, "%s\n", msgContent)
 
 			if ui.agent != nil {
-				ui.agentResponse(msg.ID)
+				ui.agentResponse(msg.From)
 			}
 
 			return
@@ -191,12 +200,12 @@ func (ui *TUI) WriteText(msg client.Message) {
 
 		for i := range ui.list.GetItemCount() {
 			name, idStr := ui.list.GetItemText(i)
-			if msg.ID.Hex() == idStr {
+			if msg.From.Hex() == idStr {
 				ui.list.SetItemText(i, "* "+name, idStr)
 				ui.tviewApp.Draw()
 
 				if ui.agent != nil {
-					ui.agentResponse(msg.ID)
+					ui.agentResponse(msg.From)
 				}
 
 				return
@@ -212,10 +221,10 @@ func (ui *TUI) UpdateContact(id common.Address, name string) {
 
 // =============================================================================
 
-func (ui *TUI) agentResponse(id common.Address) {
+func (ui *TUI) agentResponse(from common.Address) {
 	ctx := context.TODO()
 
-	msgs := ui.history.retrieve(id)
+	msgs := ui.history.retrieve(from)
 
 	input := msgs[len(msgs)-1]
 	history := msgs[:len(msgs)-1]
@@ -229,29 +238,30 @@ func (ui *TUI) agentResponse(id common.Address) {
 	// TODO: Create some artificial delay to simulate thinking
 
 	ui.textArea.SetText(resp, true)
-	ui.buttonHandler()
+	ui.buttonHandler(from)
 }
 
-func (ui *TUI) buttonHandler() {
-	_, to := ui.list.GetItemText(ui.list.GetCurrentItem())
+func (ui *TUI) buttonHandler(to common.Address) {
+	if to == (common.Address{}) {
+		_, id := ui.list.GetItemText(ui.list.GetCurrentItem())
+		to = common.HexToAddress(id)
+	}
 
 	msg := ui.textArea.GetText()
 	if msg == "" {
 		return
 	}
 
-	id := common.HexToAddress(to)
-
-	if err := ui.app.SendMessageHandler(id, []byte(msg)); err != nil {
+	if err := ui.app.SendMessageHandler(to, []byte(msg)); err != nil {
 		msg := client.Message{
 			Name:    "system",
-			Content: fmt.Appendf(nil, "Error sending message: %s", err),
+			Content: [][]byte{fmt.Appendf(nil, "Error sending message: %s", err)},
 		}
 		ui.WriteText(msg)
 		return
 	}
 
-	ui.history.add(id, msg)
+	ui.history.add(to, msg)
 
 	ui.textArea.SetText("", false)
 }

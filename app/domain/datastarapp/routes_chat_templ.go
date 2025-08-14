@@ -6,15 +6,16 @@ package datastarapp
 
 //lint:file-ignore SA4006 This context is only used if a nested component is present.
 
-import "github.com/a-h/templ"
-import templruntime "github.com/a-h/templ/runtime"
-
 import (
 	"github.com/PeterLee0620/GoIM/foundation/client"
+	"github.com/a-h/templ"
+	templruntime "github.com/a-h/templ/runtime"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/starfederation/datastar/sdk/go"
+
 	"slices"
 	"strings"
+
+	datastar "github.com/starfederation/datastar/sdk/go"
 )
 
 func PageChat(a *App, messages ...client.Message) templ.Component {
@@ -38,7 +39,7 @@ func PageChat(a *App, messages ...client.Message) templ.Component {
 			templ_7745c5c3_Var1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<!doctype html><html lang=\"en\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"><title>USDL Chat + Datastar</title><link rel=\"stylesheet\" href=\"/static/site.css\"><script src=\"https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js\"></script><script type=\"module\" src=\"https://cdn.jsdelivr.net/gh/starfederation/datastar@1.0.0-beta.11/bundles/datastar.js\"></script></head><body data-on-load=\"@get('/chat/updates')\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<!doctype html><html lang=\"en\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"><title>USDL Chat + Datastar</title><link rel=\"stylesheet\" href=\"/static/site.css\"><script src=\"https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js\"></script><script type=\"module\" src=\"https://cdn.jsdelivr.net/gh/starfederation/datastar@1.0.0-beta.11/bundles/datastar.js\"></script></head><body data-on-load=\"@get(&#39;/chat/updates&#39;)\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -278,9 +279,9 @@ func chatMessageFragment(messages ...client.Message) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var11 string
-				templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(prettyPrintUser(msg.ID, msg.Name))
+				templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(prettyPrintUser(msg.From, msg.Name))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `app/domain/datastarapp/routes_chat.templ`, Line: 101, Col: 41}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `app/domain/datastarapp/routes_chat.templ`, Line: 101, Col: 43}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 				if templ_7745c5c3_Err != nil {
@@ -291,9 +292,9 @@ func chatMessageFragment(messages ...client.Message) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var12 string
-				templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(string(msg.Content))
+				templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(string(msg.Content[0]))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `app/domain/datastarapp/routes_chat.templ`, Line: 103, Col: 44}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `app/domain/datastarapp/routes_chat.templ`, Line: 103, Col: 47}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 				if templ_7745c5c3_Err != nil {
