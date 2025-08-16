@@ -9,7 +9,7 @@ services:
     extra_hosts:
       - host.docker.internal:host-gateway
     ports:
-      - 3000:8080
+      - 8080:8080
     volumes:
       - ./openwebui:/app/backend/data
       - /home/lee/go/src/github.com/PeterLee0620/GoIM/zarf/ollama/models:/root/.ollama/models
