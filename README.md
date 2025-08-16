@@ -4,7 +4,8 @@ GoIM 是一个基于 Go 语言实现的高性能、去中心化实时聊天室�
 
 更进一步，系统通过 langchain-go 框架集成了本地部署的 Llama 3.2 大语言模型，让每个用户都能在终端界面中与专属的 AI 助手进行实时、流畅的互动。
 
-(在此处替换为您的终端界面截图或GIF动图)
+<img width="1064" height="576" alt="image" src="https://github.com/user-attachments/assets/dcee2e63-b4f8-4557-a411-ae8f392b86a2" />
+
 
 ✨ 核心特性 (Core Features)
 去中心化消息路由 (Decentralized Messaging):
