@@ -51,7 +51,9 @@ AI 交互: 发送到特定 AI 主题（如 chat.ai）的消息会被 AI 服务�
 
 数据存储: 每个客户端负责将其收到的消息（公共和私有）持久化到本地存储中，以便在重启或切换视图时加载。
 
-(您可以在此附上一张简单的架构图)
+<img width="1173" height="659" alt="image" src="https://github.com/user-attachments/assets/4954dd62-9606-4557-bfa1-35b0771119db" />
+<img width="942" height="429" alt="image" src="https://github.com/user-attachments/assets/65fe35ab-e11c-4672-8476-276eb7bcdbc2" />
+
 
 🛠️ 技术栈 (Tech Stack)
 后端语言: Go
