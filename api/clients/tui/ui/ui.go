@@ -4,6 +4,9 @@ package ui
 import (
 	"context"
 	"fmt"
+	"math"
+	"math/rand/v2"
+	"time"
 
 	"github.com/PeterLee0620/GoIM/foundation/agent/ollamallm"
 	"github.com/PeterLee0620/GoIM/foundation/client"
@@ -53,6 +56,15 @@ func New(myAccountID common.Address, agent *ollamallm.Agent) *TUI {
 	list := tview.NewList()
 	list.SetBorder(true)
 	list.SetTitle("Users")
+
+	list.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+		if action == tview.MouseLeftDoubleClick {
+			ui.establishUserConnection()
+		}
+
+		return action, event
+	})
+
 	list.SetChangedFunc(func(idx int, name string, id string, shortcut rune) {
 		textView.Clear()
 
@@ -77,6 +89,7 @@ func New(myAccountID common.Address, agent *ollamallm.Agent) *TUI {
 			}
 		}
 
+		textView.ScrollToEnd()
 		list.SetItemText(idx, user.Name, user.ID.Hex())
 	})
 
@@ -107,6 +120,8 @@ func New(myAccountID common.Address, agent *ollamallm.Agent) *TUI {
 	if agent == nil {
 		aiToggle.SetLabel("Agent Disabled")
 	}
+
+	// -------------------------------------------------------------------------
 
 	flex := tview.NewFlex().
 		AddItem(tview.NewFlex().
@@ -139,8 +154,10 @@ func New(myAccountID common.Address, agent *ollamallm.Agent) *TUI {
 	ui.list = list
 	ui.textView = textView
 	ui.textArea = textArea
-	ui.button = button
 	ui.aiToggle = aiToggle
+	ui.button = button
+
+	// -------------------------------------------------------------------------
 
 	aiToggleHandler := func() {
 		ui.aiToggleHandler(agent != nil)
@@ -252,13 +269,22 @@ func (ui *TUI) agentResponse(from common.Address) {
 	input := msgs[len(msgs)-1]
 	history := msgs[:len(msgs)-1]
 
+	start := time.Now()
+
 	resp, err := ui.agent.Chat(ctx, input, history)
 	if err != nil {
 		fmt.Fprintln(ui.textView, "-----")
 		fmt.Fprintln(ui.textView, "failed ollama response: "+err.Error())
 	}
 
-	// TODO: Create some artificial delay to simulate thinking
+	// Create some artificial delay to simulate thinking
+	// We don't care about negative calculations because
+	// that means we've already waited long enough.
+
+	dur := int(math.Ceil(time.Since(start).Seconds()))
+	delayInSeconds := max(rand.IntN(11), 3)
+	delayInSeconds -= dur
+	time.Sleep(time.Duration(delayInSeconds) * time.Second)
 
 	ui.textArea.SetText(resp, true)
 	ui.buttonHandler(from)
@@ -273,6 +299,11 @@ func (ui *TUI) buttonHandler(to common.Address) {
 	msg := ui.textArea.GetText()
 	if msg == "" {
 		return
+	}
+
+	// Found a issue where the AI started a response with a /.
+	if ui.aiMode && msg[0] == '/' {
+		msg = msg[1:]
 	}
 
 	if err := ui.app.SendMessageHandler(to, []byte(msg)); err != nil {
@@ -309,4 +340,12 @@ func (ui *TUI) aiToggleHandler(agent bool) {
 		ui.aiToggle.SetBorderColor(tcell.ColorRed)
 		ui.aiMode = false
 	}
+}
+
+func (ui *TUI) establishUserConnection() {
+	idx := ui.list.GetCurrentItem()
+	name, _ := ui.list.GetItemText(idx)
+
+	fmt.Fprintln(ui.textView, "-----")
+	fmt.Fprintf(ui.textView, "Establishing Peer Connection with %s ...", name)
 }
