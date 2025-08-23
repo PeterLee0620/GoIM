@@ -2,29 +2,25 @@ package tcp_test
 
 import (
 	"bufio"
-	"io"
-	"net"
+	"fmt"
 	"sync/atomic"
 	"time"
 
-	"github.com/PeterLee0620/GoIM/foundation/tcp"
+	"github.com/ardanlabs/usdl/foundation/tcp"
 )
 
 // tcpConnHandler is required to process data.
-type tcpConnHandler struct{}
+type tcpHandlers struct{}
 
 // Bind is called to init to reader and writer.
-func (tch tcpConnHandler) Bind(conn net.Conn) (io.Reader, io.Writer) {
-	return bufio.NewReader(conn), bufio.NewWriter(conn)
+func (tcpHandlers) Bind(clt *tcp.Client) {
+	clt.Reader = bufio.NewReader(clt.Conn)
 }
-
-// tcpReqHandler is required to process client messages.
-type tcpReqHandler struct{}
 
 // Read implements the udp.ReqHandler interface. It is provided a request
 // value to popular and a io.Reader that was created in the Bind above.
-func (tcpReqHandler) Read(ipAddress string, reader io.Reader) ([]byte, int, error) {
-	bufReader := reader.(*bufio.Reader)
+func (tcpHandlers) Read(clt *tcp.Client) ([]byte, int, error) {
+	bufReader := clt.Reader.(*bufio.Reader)
 
 	// Read a small string to keep the code simple.
 	line, err := bufReader.ReadString('\n')
@@ -38,27 +34,12 @@ func (tcpReqHandler) Read(ipAddress string, reader io.Reader) ([]byte, int, erro
 var dur int64
 
 // Process is used to handle the processing of the message.
-func (tcpReqHandler) Process(r *tcp.Request) {
-	resp := tcp.Response{
-		TCPAddr: r.TCPAddr,
-		Data:    []byte("GOT IT\n"),
-		Length:  7,
+func (tcpHandlers) Process(r *tcp.Request, clt *tcp.Client) {
+	if _, err := clt.Writer.Write([]byte("GOT IT\n")); err != nil {
+		fmt.Println("***> SERVER: ERROR SENDING RESPONSE:", err)
+		return
 	}
-
-	r.TCP.Send(r.Context, &resp)
 
 	d := int64(time.Since(r.ReadAt))
 	atomic.StoreInt64(&dur, d)
-}
-
-type tcpRespHandler struct{}
-
-// Write is provided the user-defined writer and the data to write.
-func (tcpRespHandler) Write(r *tcp.Response, writer io.Writer) error {
-	bufWriter := writer.(*bufio.Writer)
-	if _, err := bufWriter.WriteString(string(r.Data)); err != nil {
-		return err
-	}
-
-	return bufWriter.Flush()
 }
