@@ -16,7 +16,7 @@ import (
 	"github.com/PeterLee0620/GoIM/app/domain/tcpapp"
 	"github.com/PeterLee0620/GoIM/app/sdk/mux"
 	"github.com/PeterLee0620/GoIM/business/domain/chatbus"
-	"github.com/PeterLee0620/GoIM/business/domain/chatbus/storage/usermem"
+	"github.com/PeterLee0620/GoIM/business/domain/chatbus/managers/uicltmgr"
 	"github.com/PeterLee0620/GoIM/foundation/logger"
 	"github.com/PeterLee0620/GoIM/foundation/tcp"
 	"github.com/PeterLee0620/GoIM/foundation/web"
@@ -214,8 +214,8 @@ func run(ctx context.Context, log *logger.Logger) error {
 	cfgBus := chatbus.Config{
 		Log:         log,
 		NATSConn:    nc,
-		UICltMgr:    usermem.New(log),
-		TCPCltMgr:   nil,
+		UICltMgr:    uicltmgr.New(log),
+		TCPCltMgr:   tcpCM,
 		NATSSubject: cfg.NATS.Subject,
 		CAPID:       capID,
 	}

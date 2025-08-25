@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/PeterLee0620/GoIM/foundation/tcp"
+	"github.com/ardanlabs/usdl/foundation/tcp"
 )
 
 // TestTCP provide a test of listening for a connection and

@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/PeterLee0620/GoIM/foundation/tcp"
+	"github.com/ardanlabs/usdl/foundation/tcp"
 )
 
 // tcpConnHandler is required to process data.
@@ -42,4 +42,8 @@ func (tcpHandlers) Process(r *tcp.Request, clt *tcp.Client) {
 
 	d := int64(time.Since(r.ReadAt))
 	atomic.StoreInt64(&dur, d)
+}
+
+func (tcpHandlers) Drop(clt *tcp.Client) {
+	fmt.Println("***> SERVER: CONNECTION CLOSED")
 }
