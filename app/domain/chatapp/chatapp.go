@@ -9,17 +9,20 @@ import (
 	"github.com/PeterLee0620/GoIM/business/domain/chatbus"
 	"github.com/PeterLee0620/GoIM/foundation/logger"
 	"github.com/PeterLee0620/GoIM/foundation/web"
+	"github.com/ethereum/go-ethereum/common"
 )
 
 type app struct {
-	log  *logger.Logger
-	chat *chatbus.Business
+	log        *logger.Logger
+	chat       *chatbus.Business
+	serverAddr string
 }
 
-func newApp(log *logger.Logger, chat *chatbus.Business) *app {
+func newApp(log *logger.Logger, chat *chatbus.Business, serverAddr string) *app {
 	return &app{
-		log:  log,
-		chat: chat,
+		log:        log,
+		chat:       chat,
+		serverAddr: serverAddr,
 	}
 }
 
@@ -32,11 +35,23 @@ func (a *app) connect(ctx context.Context, r *http.Request) web.Encoder {
 
 	a.chat.UIListen(ctx, usr)
 
+	a.chat.DropTCPConnection(ctx, usr.ID)
+
 	return web.NewNoResponse()
 }
 
-func (a *app) p2p(ctx context.Context, r *http.Request) web.Encoder {
-	// CALL INTO THE CHATBUS TO DIAL A P2P CONNECTION
-	// a.chat.DialP2PConnection(ctx, userID, "tcp4", "localhost:8080")
+func (a *app) tcpConnect(ctx context.Context, r *http.Request) web.Encoder {
+	var tcpConnReq tcpConnRequest
+	if err := web.Decode(r, &tcpConnReq); err != nil {
+		return errs.Newf(errs.InvalidArgument, "invalid request: %s", err)
+	}
+
+	tuiUserID := common.HexToAddress(tcpConnReq.TUIUserID)
+	clientUserID := common.HexToAddress(tcpConnReq.ClientUserID)
+
+	if err := a.chat.DialTCPConnection(ctx, tuiUserID, clientUserID, "tcp4", tcpConnReq.TCPHost); err != nil {
+		return errs.Newf(errs.Internal, "failed to dial tcp connection: %s", err)
+	}
+
 	return nil
 }

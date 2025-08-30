@@ -2,6 +2,8 @@
 package client
 
 import (
+	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -9,10 +11,14 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
+	"net"
+	"net/http"
 	"strings"
 	"time"
 
+	"github.com/PeterLee0620/GoIM/app/sdk/errs"
 	"github.com/PeterLee0620/GoIM/foundation/signature"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gorilla/websocket"
@@ -38,6 +44,7 @@ type User struct {
 	AppLastNonce uint64
 	LastNonce    uint64
 	Key          string
+	TCPHost      string
 	Messages     []Message
 }
 
@@ -117,7 +124,9 @@ func (app *App) Run() error {
 }
 
 func (app *App) Handshake(acct MyAccount) error {
-	conn, _, err := websocket.DefaultDialer.Dial(app.url, nil)
+	url := fmt.Sprintf("ws://%s/connect", app.url)
+
+	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
 	if err != nil {
 		return fmt.Errorf("dial: %w", err)
 	}
@@ -349,6 +358,85 @@ func (app *App) Contacts() []User {
 
 func (app *App) QueryContactByID(id common.Address) (User, error) {
 	return app.db.QueryContactByID(id)
+}
+
+// =============================================================================
+
+// This provides a default client configuration, but it's recommended
+// this is replaced by the user with application specific settings using
+// the WithClient function at the time a AuthAPI is constructed.
+// DualStack Deprecated: Fast Fallback is enabled by default. To disable, set FallbackDelay to a negative value.
+var defaultClient = http.Client{
+	Transport: &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   10 * time.Second,
+			KeepAlive: 15 * time.Second,
+		}).DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	},
+}
+
+func (app *App) EstablishTCPConnection(ctx context.Context, tuiUserID common.Address, clientUserID common.Address) error {
+	usr, err := app.db.QueryContactByID(clientUserID)
+	if err != nil {
+		return fmt.Errorf("query contact: %w", err)
+	}
+
+	if usr.TCPHost == "" {
+		return fmt.Errorf("no TCP host found for contact: %s", clientUserID)
+	}
+
+	tcpConnRequest := struct {
+		TUIUserID    string `json:"tui_user_id"`
+		ClientUserID string `json:"client_user_id"`
+		TCPHost      string `json:"tcp_host"`
+	}{
+		TUIUserID:    tuiUserID.String(),
+		ClientUserID: clientUserID.String(),
+		TCPHost:      usr.TCPHost,
+	}
+
+	var b bytes.Buffer
+	if err := json.NewEncoder(&b).Encode(tcpConnRequest); err != nil {
+		return fmt.Errorf("encoding error: %w", err)
+	}
+
+	url := fmt.Sprintf("http://%s/tcpconnect", app.url)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, &b)
+	if err != nil {
+		return fmt.Errorf("create request error: %s: %w", url, err)
+	}
+
+	req.Header.Set("Cache-Control", "no-cache")
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := defaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("do: error: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNoContent {
+		return nil
+	}
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("copy error: %w", err)
+	}
+
+	var errs *errs.Error
+	if err := json.Unmarshal(data, &errs); err != nil {
+		return fmt.Errorf("failed: response: %s, decoding error: %w ", string(data), err)
+	}
+
+	return errs
 }
 
 // =============================================================================

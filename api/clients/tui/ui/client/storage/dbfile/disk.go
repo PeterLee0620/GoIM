@@ -43,6 +43,7 @@ type dataFileUser struct {
 	AppLastNonce uint64         `json:"app_last_nonce"`
 	LastNonce    uint64         `json:"last_nonce"`
 	Key          string         `json:"key,omitempty"`
+	TCPHost      string         `json:"tcp_host,omitempty"`
 }
 
 type dataFile struct {
@@ -89,8 +90,8 @@ func createDBOnDisk(myAccountID common.Address) (dataFile, error) {
 	df := dataFile{
 		MyAccount: myAccount{
 			ID:          myAccountID,
-			Name:        "Lee",
-			ProfilePath: "zarf/client/profile/lee.txt",
+			Name:        "Anonymous",
+			ProfilePath: "zarf/client/profile/bill.txt",
 		},
 		Contacts: []dataFileUser{
 			{

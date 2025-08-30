@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ardanlabs/usdl/foundation/tcp"
+	"github.com/PeterLee0620/GoIM/foundation/tcp"
 )
 
 // tcpConnHandler is required to process data.

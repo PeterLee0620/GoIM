@@ -5,9 +5,6 @@ import (
 	"fmt"
 )
 
-//	func formatMessage(name string, msg []byte) []byte {
-//		return fmt.Appendf(nil, "%s: %s", name, string(msg))
-//	}
 func StitchMessages(msgs [][]byte) string {
 	var b bytes.Buffer
 	for _, msg := range msgs {

@@ -5,15 +5,14 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/PeterLee0620/GoIM/foundation/agent/ollamallm"
-
 	"github.com/PeterLee0620/GoIM/api/clients/tui/ui"
-	"github.com/PeterLee0620/GoIM/foundation/client"
-	"github.com/PeterLee0620/GoIM/foundation/client/storage/dbfile"
+	"github.com/PeterLee0620/GoIM/api/clients/tui/ui/client"
+	"github.com/PeterLee0620/GoIM/api/clients/tui/ui/client/storage/dbfile"
+	"github.com/PeterLee0620/GoIM/foundation/agent/ollamallm"
 )
 
 const (
-	url            = "ws://localhost:3000/connect"
+	url            = "localhost:3000"
 	configFilePath = "zarf/client"
 )
 
@@ -42,12 +41,14 @@ func run() error {
 		return fmt.Errorf("ollama agent: %w", err)
 	}
 
+	// If we can't connect to the ollama agent, we can use it.
 	fmt.Println("warming up the agent...")
 	if _, err := agent.Chat(context.Background(), "warm up", nil); err != nil {
 		agent = nil
 	}
 
 	// -------------------------------------------------------------------------
+
 	ui := ui.New(id.MyAccountID, agent)
 
 	app := client.NewApp(db, id, url, ui)

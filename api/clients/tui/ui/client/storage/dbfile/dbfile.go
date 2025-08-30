@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/PeterLee0620/GoIM/foundation/client"
+	"github.com/PeterLee0620/GoIM/api/clients/tui/ui/client"
 	"github.com/ethereum/go-ethereum/common"
 )
 
@@ -31,6 +31,7 @@ func NewDB(filePath string, myAccountID common.Address) (*DB, error) {
 			AppLastNonce: usr.AppLastNonce,
 			LastNonce:    usr.LastNonce,
 			Key:          usr.Key,
+			TCPHost:      usr.TCPHost,
 		}
 	}
 

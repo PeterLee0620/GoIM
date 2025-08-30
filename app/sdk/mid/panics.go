@@ -6,7 +6,6 @@ import (
 	"runtime/debug"
 
 	"github.com/PeterLee0620/GoIM/app/sdk/errs"
-
 	"github.com/PeterLee0620/GoIM/foundation/web"
 )
 

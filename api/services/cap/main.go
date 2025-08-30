@@ -13,7 +13,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/PeterLee0620/GoIM/app/domain/tcpapp"
 	"github.com/PeterLee0620/GoIM/app/sdk/mux"
 	"github.com/PeterLee0620/GoIM/business/domain/chatbus"
 	"github.com/PeterLee0620/GoIM/business/domain/chatbus/managers/uicltmgr"
@@ -27,12 +26,9 @@ import (
 
 /*
 	CAP to CAP communication
-		- Add new client drop function to tcp package and extend out
-		- Finish the work on TCPClientManager
-			- Finish the Dial API saving the client to the new manager
-			- Line 146 of chatbus/ui.go and lookup the user in the new manager
-		- Add new route for establishing a p2p connection in app layer
-		- Wire in the double click to the TCP Client Manager.
+		- fix: When client tcp drops the cap is still tring to use tcp.
+		- fix ui coloring issue with connections and drops
+		- final testing
 		- Tailscale
 
 	Datafile transfer
@@ -152,6 +148,11 @@ func run(ctx context.Context, log *logger.Logger) error {
 	log.Info(ctx, "startup", "status", "getting cap", "capID", capID)
 
 	// -------------------------------------------------------------------------
+	// UI Client Manager
+
+	uiCltMgr := uicltmgr.New(log)
+
+	// -------------------------------------------------------------------------
 	// TCP Server
 
 	tcpSrvLogger := func(ctx context.Context, name string, evt string, typ string, ipAddress string, format string, a ...any) {
@@ -161,7 +162,7 @@ func run(ctx context.Context, log *logger.Logger) error {
 	tcpSrvCfg := tcp.ServerConfig{
 		NetType:  cfg.TCP.NetType,
 		Addr:     cfg.TCP.Addr,
-		Handlers: tcpapp.NewServerHandlers(log),
+		Handlers: chatbus.NewServerHandlers(log, uiCltMgr),
 		Logger:   tcpSrvLogger,
 	}
 
@@ -177,7 +178,7 @@ func run(ctx context.Context, log *logger.Logger) error {
 	tcpErrors := make(chan error, 1)
 
 	go func() {
-		log.Info(ctx, "TCP", "status", "starting TCP server")
+		log.Info(ctx, "TCP", "status", "starting TCP server", "addr", cfg.TCP.Addr)
 		tcpErrors <- tcpSrv.Listen()
 	}()
 
@@ -189,7 +190,7 @@ func run(ctx context.Context, log *logger.Logger) error {
 	}
 
 	cfgCltCfg := tcp.ClientConfig{
-		Handlers: tcpapp.NewClientHandlers(log),
+		Handlers: chatbus.NewClientHandlers(log),
 		Logger:   tcpCltLogger,
 	}
 
@@ -214,7 +215,7 @@ func run(ctx context.Context, log *logger.Logger) error {
 	cfgBus := chatbus.Config{
 		Log:         log,
 		NATSConn:    nc,
-		UICltMgr:    uicltmgr.New(log),
+		UICltMgr:    uiCltMgr,
 		TCPCltMgr:   tcpCM,
 		NATSSubject: cfg.NATS.Subject,
 		CAPID:       capID,
@@ -234,8 +235,9 @@ func run(ctx context.Context, log *logger.Logger) error {
 	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
 
 	cfgMux := mux.Config{
-		Log:     log,
-		ChatBus: chatBus,
+		Log:        log,
+		ChatBus:    chatBus,
+		ServerAddr: cfg.TCP.Addr,
 	}
 
 	webAPI := mux.WebAPI(cfgMux)
