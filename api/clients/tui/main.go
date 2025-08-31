@@ -8,7 +8,7 @@ import (
 	"github.com/PeterLee0620/GoIM/api/clients/tui/ui"
 	"github.com/PeterLee0620/GoIM/api/clients/tui/ui/client"
 	"github.com/PeterLee0620/GoIM/api/clients/tui/ui/client/storage/dbfile"
-	"github.com/PeterLee0620/GoIM/foundation/agent/ollamallm"
+	"github.com/PeterLee0620/GoIM/foundation/agents/ollamallm"
 )
 
 const (

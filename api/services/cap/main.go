@@ -25,14 +25,16 @@ import (
 )
 
 /*
-	CAP to CAP communication
-		- fix: ui coloring issue with connections and drops
-			- We need the handshake for new tcp connections in bind
-		- fix: Drop TCP connections with double click
-		- final testing
+	MISC
+		- Write message to disk using our private key
+		- Fix agents from responding to tcp connections
 
 	Datafile transfer
 		- Private stream
+		- Encryption
+
+	Terminate TLS Connections
+		- TCP P2P
 
 	Group Chat
 		- Allow users to create groups

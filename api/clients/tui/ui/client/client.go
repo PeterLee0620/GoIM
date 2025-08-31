@@ -24,6 +24,8 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+var ErrConnectionDropped = errors.New("connection dropped")
+
 type MyAccount struct {
 	ID          common.Address
 	Name        string
@@ -36,6 +38,7 @@ type Message struct {
 	Name        string
 	Content     [][]byte
 	DateCreated time.Time
+	Encrypted   bool
 }
 
 type User struct {
@@ -327,10 +330,11 @@ func (app *App) SendMessageHandler(to common.Address, msg []byte) error {
 
 	if msg[0] != '/' {
 		msg := Message{
-			From:    app.id.MyAccountID,
-			To:      to,
-			Name:    "You",
-			Content: onScreen,
+			From:      app.id.MyAccountID,
+			To:        to,
+			Name:      "You",
+			Content:   onScreen,
+			Encrypted: encrypted,
 		}
 
 		if err := app.db.InsertMessage(to, msg); err != nil {
@@ -430,7 +434,7 @@ func (app *App) EstablishTCPConnection(ctx context.Context, tuiUserID common.Add
 		return fmt.Errorf("encoding error: %w", err)
 	}
 
-	url := fmt.Sprintf("http://%s/tcpconnect", app.url)
+	url := fmt.Sprintf("http://%s/tcpconnectdrop", app.url)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, &b)
 	if err != nil {
@@ -446,13 +450,25 @@ func (app *App) EstablishTCPConnection(ctx context.Context, tuiUserID common.Add
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusNoContent {
-		return nil
-	}
-
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("copy error: %w", err)
+	}
+
+	if resp.StatusCode == http.StatusOK {
+		var resp struct {
+			Connected bool   `json:"connected"`
+			Message   string `json:"message"`
+		}
+		if err := json.Unmarshal(data, &resp); err != nil {
+			return fmt.Errorf("failed: response: %s, decoding error: %w ", string(data), err)
+		}
+
+		if resp.Connected {
+			return nil
+		}
+
+		return ErrConnectionDropped
 	}
 
 	var errs *errs.Error
@@ -510,10 +526,11 @@ func (app *App) preprocessRecvMessage(inMsg incomingMessage) error {
 	if msgs[0][0] != '/' {
 		if !inMsg.Encrypted {
 			msg := Message{
-				From:    inMsg.From.ID,
-				To:      app.id.MyAccountID,
-				Name:    inMsg.From.Name,
-				Content: msgs,
+				From:      inMsg.From.ID,
+				To:        app.id.MyAccountID,
+				Name:      inMsg.From.Name,
+				Content:   msgs,
+				Encrypted: false,
 			}
 
 			if err := app.db.InsertMessage(inMsg.From.ID, msg); err != nil {
@@ -536,10 +553,11 @@ func (app *App) preprocessRecvMessage(inMsg incomingMessage) error {
 		}
 
 		msg := Message{
-			From:    inMsg.From.ID,
-			To:      app.id.MyAccountID,
-			Name:    inMsg.From.Name,
-			Content: decryptedData,
+			From:      inMsg.From.ID,
+			To:        app.id.MyAccountID,
+			Name:      inMsg.From.Name,
+			Content:   decryptedData,
+			Encrypted: true,
 		}
 
 		if err := app.db.InsertMessage(inMsg.From.ID, msg); err != nil {
@@ -567,10 +585,11 @@ func (app *App) preprocessRecvMessage(inMsg incomingMessage) error {
 		}
 
 		msg := Message{
-			From:    inMsg.From.ID,
-			To:      app.id.MyAccountID,
-			Name:    inMsg.From.Name,
-			Content: [][]byte{[]byte("** updated contact's key **")},
+			From:      inMsg.From.ID,
+			To:        app.id.MyAccountID,
+			Name:      inMsg.From.Name,
+			Content:   [][]byte{[]byte("** updated contact's key **")},
+			Encrypted: false,
 		}
 
 		if err := app.db.InsertMessage(inMsg.From.ID, msg); err != nil {
