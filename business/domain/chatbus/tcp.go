@@ -26,10 +26,12 @@ func NewClientHandlers(log *logger.Logger) *ClientHandlers {
 }
 
 // Bind binds the client to the server handlers.
-func (ch ClientHandlers) Bind(clt *tcp.Client) {
-	ch.log.Info(clt.Context(), "client-bind", "userID", clt.UserID())
+func (ch ClientHandlers) Bind(clt *tcp.Client) error {
+	ch.log.Info(clt.Context(), "client-bind", "userID", clt.Key())
 
 	clt.Reader = bufio.NewReader(clt.Conn)
+
+	return nil
 }
 
 // Read reads data from the client connection.
@@ -71,10 +73,56 @@ func NewServerHandlers(log *logger.Logger, uiCltMgr UIClientManager) *ServerHand
 }
 
 // Bind binds the client to the server handlers.
-func (sh ServerHandlers) Bind(clt *tcp.Client) {
-	sh.log.Info(clt.Context(), "server-bind", "userID", clt.UserID())
+func (sh ServerHandlers) Bind(clt *tcp.Client) error {
+	sh.log.Info(clt.Context(), "server-bind", "key", clt.Key())
 
-	clt.Reader = bufio.NewReader(clt.Conn)
+	bufReader := bufio.NewReader(clt.Conn)
+
+	clt.Reader = bufReader
+
+	// -------------------------------------------------------------------------
+	// PERFORM HANDSHAKE TO RECEIVE USER ID
+
+	clt.Conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+
+	line, err := bufReader.ReadString('\n')
+	if err != nil {
+		sh.log.Info(clt.Context(), "server-bind: handshake-wait", "ERROR", err)
+		return err
+	}
+
+	sh.log.Info(clt.Context(), "server-bind: handshake", "json", line)
+
+	var handshake struct {
+		UserID string `json:"user_id"`
+	}
+
+	if err := json.Unmarshal([]byte(line), &handshake); err != nil {
+		sh.log.Info(clt.Context(), "server-bind: handshake-unmarshal", "ERROR", err)
+		return err
+	}
+
+	clt.SetUserID(handshake.UserID)
+
+	// -------------------------------------------------------------------------
+
+	msg := [][]byte{[]byte("EVENT"), []byte("TCP-CONN")}
+
+	from := UIUser{
+		ID: common.HexToAddress(clt.UserID()),
+	}
+
+	for _, conn := range sh.uiCltMgr.Connections() {
+		to := UIUser{
+			UIConn: conn.Conn,
+		}
+
+		if err := uiSendMessage(from, to, 0, false, msg); err != nil {
+			sh.log.Info(clt.Context(), "uilisten: send", "ERROR", err)
+		}
+	}
+
+	return nil
 }
 
 // Read reads data from the client connection.
@@ -154,6 +202,22 @@ func (sh ServerHandlers) Process(r *tcp.Request, clt *tcp.Client) {
 // Drop is called when a connection is dropped.
 func (sh ServerHandlers) Drop(clt *tcp.Client) {
 	sh.log.Info(clt.Context(), "server-drop", "userID", clt.UserID())
+
+	msg := [][]byte{[]byte("EVENT"), []byte("TCP-DROP")}
+
+	from := UIUser{
+		ID: common.HexToAddress(clt.UserID()),
+	}
+
+	for _, conn := range sh.uiCltMgr.Connections() {
+		to := UIUser{
+			UIConn: conn.Conn,
+		}
+
+		if err := uiSendMessage(from, to, 0, false, msg); err != nil {
+			sh.log.Info(clt.Context(), "uilisten: send", "ERROR", err)
+		}
+	}
 }
 
 // =============================================================================

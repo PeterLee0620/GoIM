@@ -26,10 +26,10 @@ import (
 
 /*
 	CAP to CAP communication
-		- fix: When client tcp drops the cap is still tring to use tcp.
-		- fix ui coloring issue with connections and drops
+		- fix: ui coloring issue with connections and drops
+			- We need the handshake for new tcp connections in bind
+		- fix: Drop TCP connections with double click
 		- final testing
-		- Tailscale
 
 	Datafile transfer
 		- Private stream
@@ -217,6 +217,7 @@ func run(ctx context.Context, log *logger.Logger) error {
 		NATSConn:    nc,
 		UICltMgr:    uiCltMgr,
 		TCPCltMgr:   tcpCM,
+		TCPServer:   tcpSrv,
 		NATSSubject: cfg.NATS.Subject,
 		CAPID:       capID,
 	}

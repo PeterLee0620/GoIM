@@ -3,6 +3,7 @@ package chatbus
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -42,6 +43,7 @@ type Config struct {
 	NATSConn    *nats.Conn
 	UICltMgr    UIClientManager
 	TCPCltMgr   TCPClientManager
+	TCPServer   *tcp.Server
 	NATSSubject string
 	CAPID       uuid.UUID
 }
@@ -56,6 +58,7 @@ type Business struct {
 	natsSubject  string
 	uiCltMgr     UIClientManager
 	tcpCltMgr    TCPClientManager
+	tcpServer    *tcp.Server
 	tcpConnMap   map[common.Address][]common.Address
 	tcpConnMapMu sync.Mutex
 }
@@ -98,6 +101,7 @@ func NewBusiness(cfg Config) (*Business, error) {
 		natsSubject: cfg.NATSSubject,
 		uiCltMgr:    cfg.UICltMgr,
 		tcpCltMgr:   cfg.TCPCltMgr,
+		tcpServer:   cfg.TCPServer,
 		tcpConnMap:  make(map[common.Address][]common.Address),
 	}
 
@@ -114,10 +118,36 @@ func NewBusiness(cfg Config) (*Business, error) {
 func (b *Business) DialTCPConnection(ctx context.Context, tuiUserID common.Address, clientUserID common.Address, network string, address string) error {
 	b.log.Info(ctx, "dial-tcp-connection", "tuiUserID", tuiUserID, "clientUserID", clientUserID, "network", network, "address", address)
 
-	_, err := b.tcpCltMgr.Dial(ctx, clientUserID.String(), network, address)
+	client, err := b.tcpCltMgr.Dial(ctx, clientUserID.String(), network, address)
 	if err != nil {
 		return fmt.Errorf("dial tcp connection: %w", err)
 	}
+
+	// -------------------------------------------------------------------------
+	// PERFORM HANDSHAKE TO SEND USER ID
+
+	handshake := struct {
+		User string `json:"user_id"`
+	}{
+		User: tuiUserID.String(),
+	}
+
+	data, err := json.Marshal(handshake)
+	if err != nil {
+		return fmt.Errorf("marshal handshake: %w", err)
+	}
+
+	if _, err := client.Writer.Write(data); err != nil {
+		return fmt.Errorf("write handshake: %w", err)
+	}
+
+	if _, err := client.Writer.Write([]byte("\n")); err != nil {
+		return fmt.Errorf("write newline: %w", err)
+	}
+
+	// -------------------------------------------------------------------------
+
+	client.SetUserID(clientUserID.String())
 
 	b.addTCPConnection(tuiUserID, clientUserID)
 
@@ -131,6 +161,21 @@ func (b *Business) DropTCPConnection(ctx context.Context, tuiUserID common.Addre
 	b.removeTCPConnection(ctx, tuiUserID)
 
 	return nil
+}
+
+// TCPConnections returns the list of client user IDs for a given tui user ID.
+func (b *Business) TCPConnections(ctx context.Context) []common.Address {
+	users := b.tcpServer.Clients()
+
+	b.log.Info(ctx, "tcp-connections", "count", len(users))
+
+	addresses := make([]common.Address, len(users))
+	for i, user := range users {
+		addresses[i] = common.HexToAddress(user)
+		b.log.Info(ctx, "tcp-connections", "user", user)
+	}
+
+	return addresses
 }
 
 // =============================================================================

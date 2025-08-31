@@ -180,7 +180,10 @@ func (srv *Server) Listen() error {
 
 				// Add this new connection to the manager map and
 				// start the client goroutine.
-				srv.startNewClient(conn)
+				if err := srv.startNewClient(conn); err != nil {
+					srv.log(srv.ctx, srv.name, EvtAccept, TypError, conn.RemoteAddr().String(), err.Error())
+					conn.Close()
+				}
 			}
 		}
 	}()
@@ -210,9 +213,16 @@ func (srv *Server) Addr() net.Addr {
 	return srv.tcpAddr
 }
 
-// Clients returns the number of active clients connected.
-func (srv *Server) Clients() int {
-	return srv.clients.count()
+// Clients returns the number of active clients connected by user ID.
+func (srv *Server) Clients() []string {
+	clients := srv.clients.copy()
+
+	users := make([]string, 0, len(clients))
+	for _, c := range clients {
+		users = append(users, c.UserID())
+	}
+
+	return users
 }
 
 // Groom drops connections that are not active for the specified duration.
@@ -236,18 +246,17 @@ func (srv *Server) Groom(d time.Duration) {
 // =============================================================================
 
 // startNewClient takes a new connection and adds it to the manager.
-func (srv *Server) startNewClient(conn net.Conn) {
-	userID := ipAddress(conn)
+func (srv *Server) startNewClient(conn net.Conn) error {
+	key := ipAddress(conn)
 
-	if _, err := srv.clients.find(userID); err == nil {
-		srv.log(srv.ctx, srv.name, EvtJoin, TypError, userID, "already connected")
-		conn.Close()
-		return
+	c, err := newClient(key, srv.name, srv.log, srv.clients, srv.handlers, conn)
+	if err != nil {
+		return err
 	}
 
-	c := newClient(userID, srv.name, srv.log, srv.clients, srv.handlers, conn)
-
-	srv.clients.add(userID, c)
+	srv.clients.add(key, c)
 
 	c.start()
+
+	return nil
 }

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"math"
 	"math/rand/v2"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/PeterLee0620/GoIM/api/clients/tui/ui/client"
@@ -90,7 +92,9 @@ func New(myAccountID common.Address, agent *ollamallm.Agent) *TUI {
 		}
 
 		textView.ScrollToEnd()
-		list.SetItemText(idx, user.Name, user.ID.Hex())
+
+		name = strings.ReplaceAll(name, "* ", "")
+		list.SetItemText(idx, name, id)
 	})
 
 	// -------------------------------------------------------------------------
@@ -193,6 +197,8 @@ func (ui *TUI) SetApp(app *client.App) {
 }
 
 func (ui *TUI) Run() error {
+	ui.updateState()
+
 	return ui.tviewApp.SetRoot(ui.flex, true).EnableMouse(true).Run()
 }
 
@@ -241,8 +247,10 @@ func (ui *TUI) WriteText(msg client.Message) {
 		for i := range ui.list.GetItemCount() {
 			name, idStr := ui.list.GetItemText(i)
 			if msg.From.Hex() == idStr {
-				ui.list.SetItemText(i, "* "+name, idStr)
-				ui.tviewApp.Draw()
+				if !strings.Contains(name, "*") {
+					ui.list.SetItemText(i, "* "+name, idStr)
+					ui.tviewApp.Draw()
+				}
 
 				if ui.aiMode {
 					ui.agentResponse(msg.From)
@@ -254,12 +262,99 @@ func (ui *TUI) WriteText(msg client.Message) {
 	}
 }
 
-func (ui *TUI) UpdateContact(id common.Address, name string) {
+func (ui *TUI) AddContact(id common.Address, name string) {
 	shortcut := rune(ui.list.GetItemCount() + 49)
 	ui.list.AddItem(name, id.Hex(), shortcut, nil)
 }
 
+var re = regexp.MustCompile(`\s{2,}`)
+
+func (ui *TUI) ApplyContactPrefix(id common.Address, option string, add bool) {
+	for i := range ui.list.GetItemCount() {
+		name, idStr := ui.list.GetItemText(i)
+
+		if id.Hex() == idStr {
+			hasStar := strings.Contains(name, "*")
+			hasLeftArrow := strings.Contains(name, "<-")
+			hasRightArrow := strings.Contains(name, "->")
+
+			name = strings.ReplaceAll(name, "*", "")
+			name = strings.ReplaceAll(name, "->", "")
+			name = strings.ReplaceAll(name, "<-", "")
+
+			switch add {
+			case true:
+				switch option {
+				case "->":
+					finalName := fmt.Sprintf("-> %s", name)
+					if hasLeftArrow {
+						finalName = fmt.Sprintf("<- %s", finalName)
+					}
+					if hasStar {
+						finalName = fmt.Sprintf("* %s", finalName)
+					}
+					finalName = strings.ReplaceAll(finalName, "<- ->", "<->")
+					finalName = re.ReplaceAllString(finalName, " ")
+					ui.list.SetItemText(i, finalName, idStr)
+
+				case "<-":
+					finalName := name
+					if hasRightArrow {
+						finalName = fmt.Sprintf("-> %s", finalName)
+					}
+					finalName = fmt.Sprintf("<- %s", finalName)
+					if hasStar {
+						finalName = fmt.Sprintf("* %s", finalName)
+					}
+					finalName = strings.ReplaceAll(finalName, "<- ->", "<->")
+					finalName = re.ReplaceAllString(finalName, " ")
+					ui.list.SetItemText(i, finalName, idStr)
+				}
+
+			case false:
+				switch option {
+				case "->":
+					finalName := name
+					if hasLeftArrow {
+						finalName = fmt.Sprintf("<- %s", finalName)
+					}
+					if hasStar {
+						finalName = fmt.Sprintf("* %s", finalName)
+					}
+					finalName = re.ReplaceAllString(finalName, " ")
+					ui.list.SetItemText(i, finalName, idStr)
+
+				case "<-":
+					finalName := name
+					if hasRightArrow {
+						finalName = fmt.Sprintf("-> %s", finalName)
+					}
+					if hasStar {
+						finalName = fmt.Sprintf("* %s", finalName)
+					}
+					finalName = re.ReplaceAllString(finalName, " ")
+					ui.list.SetItemText(i, finalName, idStr)
+				}
+			}
+
+			return
+		}
+	}
+}
+
 // =============================================================================
+
+func (ui *TUI) updateState() {
+	state, err := ui.app.GetState(context.Background())
+	if err != nil {
+		fmt.Fprintln(ui.textView, "-----")
+		fmt.Fprintln(ui.textView, "failed to get state: "+err.Error())
+	}
+
+	for _, conn := range state.TCPConnections {
+		ui.ApplyContactPrefix(conn, "->", true)
+	}
+}
 
 func (ui *TUI) agentResponse(from common.Address) {
 	ctx := context.TODO()
@@ -356,5 +451,7 @@ func (ui *TUI) establishUserConnection() {
 	}
 
 	fmt.Fprintln(ui.textView, "-----")
-	fmt.Fprintln(ui.textView, "TCP connection established")
+	fmt.Fprintf(ui.textView, "TCP connection established with %s\n", name)
+
+	ui.ApplyContactPrefix(common.HexToAddress(currentID), "<-", true)
 }
