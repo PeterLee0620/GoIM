@@ -2,6 +2,8 @@
 package dbfile
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
 	"fmt"
 	"sort"
 	"sync"
@@ -12,13 +14,14 @@ import (
 )
 
 type DB struct {
-	myAccount client.MyAccount
-	contacts  map[common.Address]client.User
-	mu        sync.RWMutex
+	myAccount  client.MyAccount
+	privKeyRSA *rsa.PrivateKey
+	contacts   map[common.Address]client.User
+	mu         sync.RWMutex
 }
 
-func NewDB(filePath string, myAccountID common.Address) (*DB, error) {
-	df, err := newDB(filePath, myAccountID)
+func NewDB(filePath string, id client.ID, jwt string) (*DB, error) {
+	df, err := newDB(filePath, id.MyAccountID, jwt)
 	if err != nil {
 		return nil, fmt.Errorf("newDB: %w", err)
 	}
@@ -40,8 +43,10 @@ func NewDB(filePath string, myAccountID common.Address) (*DB, error) {
 			ID:          df.MyAccount.ID,
 			Name:        df.MyAccount.Name,
 			ProfilePath: df.MyAccount.ProfilePath,
+			JWT:         df.MyAccount.JWT,
 		},
-		contacts: contacts,
+		privKeyRSA: id.PrivKeyRSA,
+		contacts:   contacts,
 	}
 
 	return &db, nil
@@ -100,9 +105,20 @@ func (db *DB) QueryContactByID(id common.Address) (client.User, error) {
 
 	messages := make([]client.Message, len(msgs))
 	for i, msg := range msgs {
+		decryptedData := make([][]byte, len(msg.Content))
+
+		for i, msg := range msg.Content {
+			dd, err := rsa.DecryptPKCS1v15(rand.Reader, db.privKeyRSA, []byte(msg))
+			if err != nil {
+				return client.User{}, fmt.Errorf("decrypting message: %w", err)
+			}
+
+			decryptedData[i] = dd
+		}
+
 		messages[i] = client.Message{
 			Name:        msg.Name,
-			Content:     msg.Content,
+			Content:     decryptedData,
 			DateCreated: msg.DateCreated.Local(),
 		}
 	}
@@ -172,10 +188,21 @@ func (db *DB) InsertMessage(id common.Address, msg client.Message) error {
 	u.Messages = append(u.Messages, msg)
 	db.contacts[id] = u
 
+	encryptedData := make([][]byte, len(msg.Content))
+
+	for i, msg := range msg.Content {
+		ed, err := rsa.EncryptPKCS1v15(rand.Reader, &db.privKeyRSA.PublicKey, msg)
+		if err != nil {
+			return fmt.Errorf("encrypting message: %w", err)
+		}
+
+		encryptedData[i] = ed
+	}
+
 	m := message{
 		ID:          msg.From,
 		Name:        msg.Name,
-		Content:     msg.Content,
+		Content:     encryptedData,
 		DateCreated: time.Now().UTC(),
 		Encrypted:   msg.Encrypted,
 	}

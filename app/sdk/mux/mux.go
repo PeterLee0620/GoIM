@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/PeterLee0620/GoIM/app/domain/chatapp"
+	"github.com/PeterLee0620/GoIM/app/sdk/auth"
 	"github.com/PeterLee0620/GoIM/app/sdk/mid"
 	"github.com/PeterLee0620/GoIM/business/domain/chatbus"
 	"github.com/PeterLee0620/GoIM/foundation/logger"
@@ -17,6 +18,7 @@ type Config struct {
 	Log        *logger.Logger
 	ChatBus    *chatbus.Business
 	ServerAddr string
+	Auth       *auth.Auth
 }
 
 // WebAPI constructs a http.Handler with all application routes bound.
@@ -32,7 +34,7 @@ func WebAPI(cfg Config) http.Handler {
 		mid.Panics(),
 	)
 
-	chatapp.Routes(app, cfg.Log, cfg.ChatBus, cfg.ServerAddr)
+	chatapp.Routes(app, cfg.Log, cfg.ChatBus, cfg.ServerAddr, cfg.Auth)
 
 	return app
 }
